@@ -1,27 +1,13 @@
 """
-<<<<<<< HEAD
 SatQuery — Mock VQA Tool
 
 Returns realistic mock outputs for visual question answering.
 Person 2 will replace the ``execute()`` internals with their
 fine-tuned SatQuery-RS VLM.
-=======
-SatQuery VQA Tool — Person 1 Interface
-========================================
-Single-image Visual Question Answering for remote sensing imagery.
-
-This is the clean interface that Person 1's tool registry calls.
-
-Usage:
-    from backend.tools.vqa import run_vqa
-
-    result = run_vqa("path/to/satellite.png", "What land cover is present?")
->>>>>>> origin/feature/vlm
 """
 
 from __future__ import annotations
 
-<<<<<<< HEAD
 import random
 from typing import Any
 

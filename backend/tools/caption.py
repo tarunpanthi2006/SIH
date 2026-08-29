@@ -1,24 +1,12 @@
 """
-<<<<<<< HEAD
 SatQuery — Mock Caption Tool
 
 Returns realistic mock scene descriptions.
 Person 2 will replace the ``execute()`` internals.
-=======
-SatQuery Caption Tool — Person 1 Interface
-=============================================
-Single-image scene description / captioning for remote sensing imagery.
-
-Usage:
-    from backend.tools.caption import run_caption
-
-    result = run_caption("path/to/satellite.png")
->>>>>>> origin/feature/vlm
 """
 
 from __future__ import annotations
 
-<<<<<<< HEAD
 import random
 from typing import Any
 

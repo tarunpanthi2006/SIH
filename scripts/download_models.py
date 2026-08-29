@@ -1,5 +1,4 @@
 """
-<<<<<<< HEAD
 SatQuery — Model / Checkpoint Downloader
 ==========================================
 
