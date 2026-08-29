@@ -175,5 +175,16 @@ class WorkflowPlanner:
                     f"Planner references tool '{step.tool}' which is not "
                     f"registered. Available: {self.registry.tool_names}"
                 )
+                
+            # ---- Auto-inject image paths if the LLM forgot ----
+            if not any(k in step.inputs for k in ["image", "image_a", "image_path", "optical"]):
+                if len(image_paths) == 1:
+                    step.inputs["image"] = image_paths[0]
+                    step.inputs["image_path"] = image_paths[0]
+                elif len(image_paths) >= 2:
+                    step.inputs["image_a"] = image_paths[0]
+                    step.inputs["image_b"] = image_paths[1]
+                    step.inputs["optical"] = image_paths[0]
+                    step.inputs["sar"] = image_paths[1]
 
         return ExecutionPlan(task=task, steps=steps, query=query)

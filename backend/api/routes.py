@@ -140,7 +140,7 @@ async def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
 
     # ---- 2. Initial validation (format-level) ---- #
     validator = InputValidator()
-    val_result = validator.validate(image_paths)
+    val_result = validator.validate(image_paths, pre_extracted_metadata=metadata_list)
     if not val_result.valid:
         raise HTTPException(
             status_code=422,
@@ -166,7 +166,7 @@ async def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     )
 
     # ---- 4. Task-aware validation ---- #
-    task_val = validator.validate(image_paths, task=task)
+    task_val = validator.validate(image_paths, task=task, pre_extracted_metadata=metadata_list)
     # Merge warnings (task-aware may add modality / count issues)
     all_warnings = [w.message for w in val_result.warnings] + [
         w.message for w in task_val.warnings

@@ -51,6 +51,7 @@ class InputValidator:
         self,
         image_paths: list[str],
         task: TaskType | None = None,
+        pre_extracted_metadata: list[ImageMetadata] | None = None,
     ) -> ValidationResult:
         """
         Run all validation checks.
@@ -62,6 +63,8 @@ class InputValidator:
         task : TaskType, optional
             Task type (if already determined).  When ``None``, only
             format-level checks are performed.
+        pre_extracted_metadata : list[ImageMetadata], optional
+            Use previously extracted metadata (preserves hints).
 
         Returns
         -------
@@ -69,10 +72,10 @@ class InputValidator:
         """
         errors: list[ValidationIssue] = []
         warnings: list[ValidationIssue] = []
-        metadata_list: list[ImageMetadata] = []
+        metadata_list: list[ImageMetadata] = pre_extracted_metadata if pre_extracted_metadata is not None else []
 
         # ---- Per-image checks ---- #
-        for img_path in image_paths:
+        for i, img_path in enumerate(image_paths):
             file_issues = self._check_file(img_path)
             for issue in file_issues:
                 if issue.severity == "warning":
@@ -80,9 +83,10 @@ class InputValidator:
                 else:
                     errors.append(issue)
 
-            meta = extract_metadata(img_path)
-            meta.modality = detect_modality(meta)
-            metadata_list.append(meta)
+            if pre_extracted_metadata is None:
+                meta = extract_metadata(img_path)
+                meta.modality = detect_modality(meta)
+                metadata_list.append(meta)
 
         # If any file-level errors, stop early
         if errors:
