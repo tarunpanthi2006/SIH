@@ -55,6 +55,21 @@ async def classify_task(
 
     # ---- Ensure API Key ----
     settings = get_settings()
+
+    # MOCK MODE FALLBACK
+    if settings.mock_mode:
+        q = query.lower()
+        if "change" in q:
+            return TaskType.CHANGE_DETECTION
+        elif "highlight" in q or "where" in q:
+            return TaskType.GROUNDING
+        elif "ndvi" in q or "multispectral" in q:
+            return TaskType.MULTISPECTRAL
+        elif "sar" in q or "sensors" in q:
+            return TaskType.OPTICAL_SAR
+        else:
+            return TaskType.VQA
+
     if not settings.gemini_api_key or settings.gemini_api_key == "your_api_key_here":
         logger.error("GEMINI_API_KEY is not set. Cannot use LLM Router.")
         raise ValueError("GEMINI_API_KEY is missing or invalid. Please check your .env file.")

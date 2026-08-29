@@ -76,8 +76,24 @@ class WorkflowPlanner:
         ValueError
             If any planned tool is not in the registry or API key is missing.
         """
-        # ---- Ensure API Key ----
         settings = get_settings()
+
+        # MOCK MODE FALLBACK
+        if settings.mock_mode:
+            steps = []
+            if task == TaskType.CHANGE_DETECTION:
+                steps.append(PlannedStep(tool="change_detection", inputs={"image_a": image_paths[0], "image_b": image_paths[1] if len(image_paths) > 1 else ""}))
+                steps.append(PlannedStep(tool="vqa", inputs={"question": query, "image_path": "$step_0.artifacts"}))
+            elif task == TaskType.GROUNDING:
+                steps.append(PlannedStep(tool="grounding", inputs={"image_path": image_paths[0], "query": query}))
+            elif task == TaskType.MULTISPECTRAL:
+                steps.append(PlannedStep(tool="multispectral_analysis", inputs={"image": image_paths[0], "query": query}))
+            elif task == TaskType.OPTICAL_SAR:
+                steps.append(PlannedStep(tool="optical_sar_analysis", inputs={"optical": image_paths[0], "sar": image_paths[1] if len(image_paths) > 1 else ""}))
+            else:
+                steps.append(PlannedStep(tool="vqa", inputs={"image_path": image_paths[0], "question": query}))
+            return ExecutionPlan(task=task, steps=steps, query=query)
+
         if not settings.gemini_api_key or settings.gemini_api_key == "your_api_key_here":
             logger.error("GEMINI_API_KEY is not set. Cannot use LLM Planner.")
             raise ValueError("GEMINI_API_KEY is missing or invalid. Please check your .env file.")
