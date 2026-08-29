@@ -75,3 +75,19 @@ tools:
     max_images: 1
     accepts_query: true
     output_types: [answer, statistics]
+
+# --- Python Modules ---
+change_detection:
+  module: "backend.tools.change"
+  class: "ChangeTool"
+  task_type: "change_detection"
+
+optical_sar_analysis:
+  module: "backend.tools.optical_sar"
+  class: "OpticalSarTool"
+  task_type: "optical_sar"
+
+multispectral_analysis:
+  module: "backend.tools.multispectral"
+  class: "MultispectralTool"
+  task_type: "multispectral"

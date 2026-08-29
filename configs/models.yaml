@@ -43,3 +43,31 @@ models:
       Remote-sensing VLM with grounding capabilities.
       May be used as an alternative to SatQuery-RS for
       spatial grounding tasks.
+
+# --- Implementation Details ---
+changeformer:
+  name: "ChangeFormer"
+  architecture: "ChangeFormer-MiT-b2"
+  checkpoint: "checkpoints/changeformer/ChangeFormer_LEVIR.pth"
+  input_size: 256
+  num_classes: 2
+  device: "cuda"
+  dtype: "float32"
+
+skysensepp:
+  name: "SkySense++"
+  checkpoint: "checkpoints/skysensepp/"
+  device: "cuda"
+  dtype: "float16"
+  optical_bands: ["R", "G", "B"]
+  sar_bands: ["VV", "VH"]
+  sar_preprocessing: "log_db"
+
+prithvi_eo2:
+  name: "Prithvi-EO-2.0"
+  hf_model_id: "ibm-nasa-geospatial/Prithvi-EO-2.0-600M"
+  checkpoint: "checkpoints/prithvi/"
+  input_bands: ["B02", "B03", "B04", "B8A", "B11", "B12"]
+  input_size: 224
+  device: "cuda"
+  dtype: "float32"

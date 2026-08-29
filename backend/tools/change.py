@@ -1,124 +1,137 @@
 """
-SatQuery — Mock Change Detection / Change VQA Tool
+SatQuery — Change Detection Tool
+==================================
 
-Returns mock change masks, statistics, and change-based answers.
-Person 3 will replace the ``execute()`` internals with ChangeFormer
-and the RS-adapted VLM for change VQA.
+Agent-callable wrapper around the ChangeFormer inference pipeline.
+Implements the ``SpecialistTool`` interface so Person 1's tool registry
+can invoke it with ``await tool.run(...)``.
 """
 
 from __future__ import annotations
 
-import random
+import logging
+from pathlib import Path
 from typing import Any
 
-from backend.api.schemas import (
-    Modality,
-    SpatialEvidence,
-    SpatialEvidenceType,
-    TaskType,
-    ToolResult,
-)
-from backend.tools.interfaces import BaseTool
+from backend.tools.contracts import SpecialistOutput, TaskType, make_error
+from backend.tools.interfaces import SpecialistTool
 
-_MOCK_CHANGE_ANSWERS = [
-    "Significant urban expansion is visible between the two dates, with new residential structures appearing in the eastern sector.",
-    "Vegetation loss is detected in the northern portion of the scene, possibly due to deforestation or agricultural conversion.",
-    "A new road network has been constructed connecting the two settlement clusters.",
-    "Water body extent has decreased, suggesting seasonal drought or diversion.",
-    "Built-up area has increased by approximately 18% between the two acquisitions.",
-]
+logger = logging.getLogger(__name__)
 
 
-class MockChangeDetectionTool(BaseTool):
+class ChangeTool(SpecialistTool):
+    """
+    Bi-temporal change detection tool.
+
+    Wraps ChangeFormer to detect WHERE pixels changed between two
+    co-registered images.  Returns a binary change mask, probability map,
+    change statistics, and connected-component region analysis.
+
+    For **change VQA** (WHAT does the change mean?), the spatial evidence
+    from this tool is passed to Person 2's VLM for semantic interpretation.
+    """
+
     name = "change_detection"
-    task = TaskType.CHANGE_DETECTION
-    model_name = "ChangeFormer (mock)"
-    description = "Bi-temporal change detection producing change masks and statistics."
-    required_modalities = [Modality.OPTICAL, Modality.MULTISPECTRAL]
-    min_images = 2
-    max_images = 2
-    accepts_query = False
-    output_types = ["mask", "statistics"]
+    description = (
+        "Detect spatial changes between two co-registered images "
+        "(bi-temporal change detection using ChangeFormer)."
+    )
 
-    async def execute(
+    def __init__(
         self,
-        inputs: dict[str, Any],
-        params: dict[str, Any] | None = None,
-    ) -> ToolResult:
-        image_a = inputs.get("image_a", "")
-        image_b = inputs.get("image_b", "")
-        threshold = (params or {}).get("change_threshold", 0.5)
+        checkpoint_path: str = "checkpoints/changeformer/ChangeFormer_LEVIR.pth",
+        device: str = "cuda",
+        threshold: float = 0.5,
+        output_dir: str = "outputs/change",
+    ):
+        self.checkpoint_path = checkpoint_path
+        self.device = device
+        self.threshold = threshold
+        self.output_dir = output_dir
 
-        change_pct = round(random.uniform(5.0, 35.0), 1)
-        mock_mask_path = "/artifacts/mock_change_mask.png"
+    async def load(self) -> None:
+        """Pre-load the model into GPU memory."""
+        from models.change.inference import _get_model
 
-        return self.make_result(
-            answer=f"Change detected: {change_pct}% of the scene area has changed.",
-            confidence=round(random.uniform(0.82, 0.96), 2),
-            spatial_evidence=[
-                SpatialEvidence(
-                    type=SpatialEvidenceType.MASK,
-                    path=mock_mask_path,
-                    label="change_mask",
-                ),
-            ],
-            statistics={
-                "change_percentage": change_pct,
-                "changed_pixels": random.randint(10000, 150000),
-                "total_pixels": 512 * 512,
-                "threshold": threshold,
-            },
-            artifacts=[mock_mask_path],
-            metadata={
-                "image_a": image_a,
-                "image_b": image_b,
-                "mock": True,
-            },
+        try:
+            _get_model(self.checkpoint_path, self.device)
+            self._loaded = True
+            logger.info("ChangeTool model pre-loaded on %s", self.device)
+        except Exception as exc:
+            logger.error("Failed to pre-load ChangeTool model: %s", exc)
+            self._loaded = False
+
+    async def run(
+        self,
+        image_a: str | None = None,
+        image_b: str | None = None,
+        query: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        threshold: float | None = None,
+        output_dir: str | None = None,
+        **kwargs: Any,
+    ) -> SpecialistOutput:
+        """
+        Run change detection on a bi-temporal image pair.
+
+        Parameters
+        ----------
+        image_a : str
+            Path to the earlier image.
+        image_b : str
+            Path to the later image.
+        query : str, optional
+            User question (stored in metadata for downstream VQA).
+        metadata : dict, optional
+            Geospatial metadata (e.g. ``{"gsd": 0.5}`` for 0.5 m/pixel).
+        threshold : float, optional
+            Override default probability threshold.
+        output_dir : str, optional
+            Override default output directory.
+
+        Returns
+        -------
+        SpecialistOutput
+            Structured output with change mask, statistics, etc.
+        """
+        # ── Input validation ──
+        if not image_a or not image_b:
+            return make_error(
+                TaskType.CHANGE_DETECTION,
+                "ChangeFormer",
+                "Both image_a and image_b are required for change detection.",
+            )
+
+        if not Path(image_a).exists():
+            return make_error(
+                TaskType.CHANGE_DETECTION,
+                "ChangeFormer",
+                f"image_a not found: {image_a}",
+            )
+
+        if not Path(image_b).exists():
+            return make_error(
+                TaskType.CHANGE_DETECTION,
+                "ChangeFormer",
+                f"image_b not found: {image_b}",
+            )
+
+        # ── Attach query to metadata for downstream VQA ──
+        meta = dict(metadata or {})
+        if query:
+            meta["user_query"] = query
+
+        # ── Delegate to inference pipeline ──
+        from models.change.inference import run_change
+
+        result = run_change(
+            image_a=image_a,
+            image_b=image_b,
+            checkpoint_path=self.checkpoint_path,
+            device=self.device,
+            threshold=threshold or self.threshold,
+            output_dir=output_dir or self.output_dir,
+            metadata=meta,
         )
 
-
-class MockChangeVQATool(BaseTool):
-    name = "change_vqa"
-    task = TaskType.CHANGE_VQA
-    model_name = "ChangeFormer + SatQuery-RS (mock)"
-    description = "Answer questions about changes between two temporal images."
-    required_modalities = [Modality.OPTICAL, Modality.MULTISPECTRAL]
-    min_images = 2
-    max_images = 2
-    accepts_query = True
-    output_types = ["answer", "mask", "statistics"]
-
-    async def execute(
-        self,
-        inputs: dict[str, Any],
-        params: dict[str, Any] | None = None,
-    ) -> ToolResult:
-        question = inputs.get("question", inputs.get("query", ""))
-        image_a = inputs.get("image_a", "")
-        image_b = inputs.get("image_b", "")
-
-        change_pct = round(random.uniform(5.0, 35.0), 1)
-        answer = random.choice(_MOCK_CHANGE_ANSWERS)
-        mock_mask_path = "/artifacts/mock_change_mask.png"
-
-        return self.make_result(
-            answer=answer,
-            confidence=round(random.uniform(0.80, 0.95), 2),
-            spatial_evidence=[
-                SpatialEvidence(
-                    type=SpatialEvidenceType.MASK,
-                    path=mock_mask_path,
-                    label="change_mask",
-                ),
-            ],
-            statistics={
-                "change_percentage": change_pct,
-            },
-            artifacts=[mock_mask_path],
-            metadata={
-                "question": question,
-                "image_a": image_a,
-                "image_b": image_b,
-                "mock": True,
-            },
-        )
+        return result

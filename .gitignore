@@ -34,8 +34,10 @@ Thumbs.db
 # --- Project: uploads & artifacts ---
 uploads/
 artifacts/
+outputs/
 
 # --- Project: model weights ---
+checkpoints/
 *.pt
 *.pth
 *.bin
