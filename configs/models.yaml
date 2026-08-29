@@ -1,0 +1,45 @@
+# ==============================================================
+# SatQuery — Model Catalog
+# ==============================================================
+
+models:
+  - name: SatQuery-RS
+    version: "1.0"
+    type: vlm
+    source: Person 2 (fine-tuned on BigEarthNet + RS data)
+    description: >
+      Remote-sensing adapted VLM for VQA, captioning, and
+      text-guided grounding.  Based on EarthGPT/GeoChat
+      architecture with LoRA/PEFT fine-tuning.
+
+  - name: ChangeFormer
+    version: "1.0"
+    type: change_detection
+    source: Person 3
+    description: >
+      Bi-temporal change detection model producing change masks
+      and pixel-level statistics.
+
+  - name: SkySense++
+    version: "1.0"
+    type: cross_modal
+    source: Person 3
+    description: >
+      Cross-modal optical + SAR fusion model for joint analysis.
+
+  - name: Prithvi-EO-2.0
+    version: "2.0"
+    type: foundation
+    source: NASA/IBM
+    description: >
+      Geospatial foundation model for multispectral and temporal
+      remote-sensing tasks.
+
+  - name: GeoChat
+    version: "1.0"
+    type: vlm
+    source: Open-source
+    description: >
+      Remote-sensing VLM with grounding capabilities.
+      May be used as an alternative to SatQuery-RS for
+      spatial grounding tasks.

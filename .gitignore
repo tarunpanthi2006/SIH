@@ -1,0 +1,59 @@
+# =============================================================
+# SatQuery .gitignore
+# =============================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# --- Virtual Environments ---
+.venv/
+venv/
+env/
+
+# --- Environment / Secrets ---
+.env
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Project: uploads & artifacts ---
+uploads/
+artifacts/
+
+# --- Project: model weights ---
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors
+weights/
+
+# --- Project: large data ---
+*.tif
+*.tiff
+*.hdf5
+*.nc
+datasets/*/data/
+
+# --- Logs ---
+*.log
+
+# --- Pytest ---
+.pytest_cache/
+htmlcov/
+.coverage

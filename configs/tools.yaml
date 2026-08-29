@@ -1,0 +1,77 @@
+# ==============================================================
+# SatQuery — Tool Registry Descriptors
+# ==============================================================
+# Declarative tool definitions.  The Python registry reads from
+# code, but this YAML serves as documentation and can be loaded
+# for config-driven registration in the future.
+
+tools:
+  - name: vqa
+    task: vqa
+    model: SatQuery-RS
+    description: Visual question answering on remote-sensing imagery.
+    modalities: [optical, multispectral, sar]
+    min_images: 1
+    max_images: 1
+    accepts_query: true
+    output_types: [answer]
+
+  - name: caption
+    task: caption
+    model: SatQuery-RS
+    description: Scene captioning / description for remote-sensing imagery.
+    modalities: [optical, multispectral]
+    min_images: 1
+    max_images: 1
+    accepts_query: false
+    output_types: [answer]
+
+  - name: grounding
+    task: grounding
+    model: GeoChat
+    description: Text-guided spatial grounding on remote-sensing imagery.
+    modalities: [optical, multispectral]
+    min_images: 1
+    max_images: 1
+    accepts_query: true
+    output_types: [answer, bbox]
+
+  - name: change_detection
+    task: change_detection
+    model: ChangeFormer
+    description: Bi-temporal change detection producing change masks and statistics.
+    modalities: [optical, multispectral]
+    min_images: 2
+    max_images: 2
+    accepts_query: false
+    output_types: [mask, statistics]
+
+  - name: change_vqa
+    task: change_vqa
+    model: ChangeFormer + SatQuery-RS
+    description: Answer questions about changes between two temporal images.
+    modalities: [optical, multispectral]
+    min_images: 2
+    max_images: 2
+    accepts_query: true
+    output_types: [answer, mask, statistics]
+
+  - name: optical_sar
+    task: optical_sar
+    model: SkySense++
+    description: Cross-modal analysis combining optical and SAR imagery.
+    modalities: [optical, sar]
+    min_images: 2
+    max_images: 2
+    accepts_query: true
+    output_types: [answer]
+
+  - name: multispectral
+    task: multispectral
+    model: Prithvi-EO-2.0
+    description: Multispectral / spectral-index analysis on remote-sensing imagery.
+    modalities: [multispectral]
+    min_images: 1
+    max_images: 1
+    accepts_query: true
+    output_types: [answer, statistics]

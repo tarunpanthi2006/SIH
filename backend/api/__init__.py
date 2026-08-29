@@ -1,0 +1,1 @@
+# SatQuery API sub-package

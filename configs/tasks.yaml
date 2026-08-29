@@ -1,0 +1,53 @@
+# ==============================================================
+# SatQuery — Task Definitions
+# ==============================================================
+
+tasks:
+  - name: vqa
+    description: Visual question answering on a single remote-sensing image.
+    min_images: 1
+    max_images: 1
+    requires_query: true
+    modalities: [optical, multispectral, sar]
+
+  - name: caption
+    description: Generate a natural-language scene description.
+    min_images: 1
+    max_images: 1
+    requires_query: false
+    modalities: [optical, multispectral]
+
+  - name: grounding
+    description: Locate objects / regions described in natural language.
+    min_images: 1
+    max_images: 1
+    requires_query: true
+    modalities: [optical, multispectral]
+
+  - name: change_detection
+    description: Detect pixel-level changes between two temporal images.
+    min_images: 2
+    max_images: 2
+    requires_query: false
+    modalities: [optical, multispectral]
+
+  - name: change_vqa
+    description: Answer questions about bi-temporal changes.
+    min_images: 2
+    max_images: 2
+    requires_query: true
+    modalities: [optical, multispectral]
+
+  - name: optical_sar
+    description: Cross-modal analysis combining optical and SAR imagery.
+    min_images: 2
+    max_images: 2
+    requires_query: true
+    modalities: [optical, sar]
+
+  - name: multispectral
+    description: Spectral-index and multispectral band analysis.
+    min_images: 1
+    max_images: 1
+    requires_query: true
+    modalities: [multispectral]
