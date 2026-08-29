@@ -709,3 +709,22 @@ class ChangeFormerModel(nn.Module):
             decoder_loaded, len(decoder_keys),
         )
         return model
+=======
+def detect_changes_fallback(
+    image_before: str,
+    image_after: str,
+    threshold: float = 30.0,
+    output_mask_path: Optional[str] = None,
+) -> str:
+    """
+    Simple image differencing fallback when P3's ChangeFormer is not available.
+
+    This is NOT production quality. It is a basic absolute difference + threshold
+    to allow P2 to test the Change-VQA pipeline independently of P3.
+
+    For production, P3's ChangeFormer should be used instead.
+
+    Args:
+        image_before: Path to T1 image
+        image_after: Path to T2 image
+        threshold: Pixel difference threshold (0-255)

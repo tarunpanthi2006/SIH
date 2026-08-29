@@ -1,21 +1,35 @@
 # SatQuery — Remote Sensing Intelligence System (SIH 2026 - Problem 167)
 
-SatQuery is a multimodal, agentic intelligence system designed for remote sensing imagery. This repository contains the **Orchestration Backend (Person 1's architecture)**, which dynamically routes natural-language user queries to the appropriate ML specialist models, handles cross-modal spatial/temporal validation, executes multi-step plans, and fuses evidence into a structured response.
+SatQuery is a multimodal, agentic intelligence system designed for remote sensing imagery. This repository contains the **Orchestration Backend (Person 1's architecture)** which routes queries, and the **Machine Learning Specialist Models (Person 2 & 3)** which perform inference.
 
 ## Architecture Highlights
 
 - **Agentic Task Router**: Uses an LLM (`gemini-2.5-flash`) to semantically classify user queries into distinct `TaskType`s (e.g., Change Detection, VQA, Grounding, Multispectral).
-- **Tool Registry**: A central hub where specialist models (from Person 2 & 3) register their capabilities (required modalities, input bounds).
+- **Tool Registry**: A central hub where specialist models register their capabilities (required modalities, input bounds).
 - **Execution Engine**: Generates a dynamic `ExecutionPlan` and manages multi-step tool chaining (e.g., ChangeMask -> VQA).
 - **Input Validation**: Automatically extracts metadata from GeoTIFFs/PNGs and enforces spatial (CRS, overlap) and temporal constraints before execution.
 - **Evidence Fusion**: Combines spatial outputs (masks, bounding boxes) and statistics into a standardized `EvidenceBundle`.
-- **Structured API**: Robust FastAPI server exposing a clean `/api/v1/analyze` endpoint.
+
+## Person 2: VLM Component (SatQuery-RS)
+
+### Model
+- **Base**: [LLaVA-1.5-7B](https://huggingface.co/llava-hf/llava-1.5-7b-hf) (LLaVA-1.5 architecture)
+- **Adaptation**: QLoRA fine-tuned on BigEarthNet.txt (~40K samples, 3 epochs)
+- **Result**: SatQuery-RS — remote-sensing adapted VLM
+- **Quantization**: 4-bit NF4 with double quantization
+
+### Capabilities
+| Tool | Function | Description |
+|---|---|---|
+| VQA | `vqa` | Answer questions about satellite images |
+| Caption | `caption` | Generate scene descriptions |
+| Grounding | `grounding` | Locate objects with bounding boxes |
+| Change-VQA | `change_vqa` | Interpret temporal changes |
 
 ## Getting Started
 
 ### Prerequisites
 - Python 3.10+
-- (Optional) Redis (if caching is enabled in future)
 
 ### Installation
 1. Clone the repository and navigate to the root directory.
@@ -52,13 +66,12 @@ PYTHONPATH=$(pwd) pytest -v tests/
 
 The backend currently runs in `MOCK_MODE` (or uses stub interfaces) for the specialist models. To integrate real models:
 1. Ensure `SATQUERY_MOCK_MODE=false` in `.env`.
-2. Ensure Person 2's VQA/Grounding code replaces the `MockVQATool` in `backend/tools/vqa.py`.
-3. Ensure Person 3's checkpoints (`ChangeFormer`, `Prithvi-EO`, `SkySense++`) are placed in the `checkpoints/` directory.
+2. The `SpecialistTool` classes in `backend/tools/` will automatically hook into the real model inference layers.
 
 ## Project Structure
 - `backend/api/` - FastAPI routes and Pydantic schemas.
 - `backend/agent/` - LLM Routing, Planning, and Executor.
 - `backend/tools/` - Specialist tool interfaces and contracts.
 - `backend/validation/` - Spatial, temporal, and modality validators.
-- `backend/evidence/` - Confidence scoring and fusion engine.
+- `models/` - P2 and P3 ML inference logic.
 - `tests/` - Comprehensive pytest suite.

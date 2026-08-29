@@ -1,12 +1,25 @@
 """
+<<<<<<< HEAD
 SatQuery — Mock Grounding Tool
 
 Returns mock bounding boxes for text-guided grounding.
 Person 2 will replace the ``execute()`` internals.
+=======
+SatQuery Grounding Tool — Person 1 Interface
+===============================================
+Text-guided spatial grounding for remote sensing imagery.
+Locates objects/features and returns bounding box coordinates.
+
+Usage:
+    from backend.tools.grounding import run_grounding
+
+    result = run_grounding("path/to/satellite.png", "water body")
+>>>>>>> origin/feature/vlm
 """
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 import random
 from typing import Any
 

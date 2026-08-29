@@ -71,3 +71,60 @@ prithvi_eo2:
   input_size: 224
   device: "cuda"
   dtype: "float32"
+
+# Primary VLM: GeoChat-7B adapted with LoRA → SatQuery-RS
+vlm:
+  name: "SatQuery-RS"
+  base_model: "MBZUAI/geochat-7B"
+  architecture: "llava-1.5"
+  vision_tower: "openai/clip-vit-large-patch14-336"
+  lora_adapter: "models/checkpoints/satquery-rs-vlm"
+
+  # Inference modes (matched to SATQUERY_MODE env var)
+  inference_modes:
+    quantized-4bit:
+      load_in_4bit: true
+      bnb_4bit_compute_dtype: "bfloat16"
+      bnb_4bit_quant_type: "nf4"
+      bnb_4bit_use_double_quant: true
+      device_map: "auto"
+      vram_required_gb: 6
+      description: "4-bit NF4 quantization — fits on 6GB VRAM, fast but tight"
+
+    cpu-offload:
+      load_in_4bit: false
+      device_map: "auto"
+      max_memory:
+        0: "5GiB"      # GPU
+        cpu: "20GiB"    # System RAM
+      offload_folder: "models/offload"
+      vram_required_gb: 5
+      description: "CPU offloading — safe mode for limited VRAM, uses system RAM"
+
+    full-fp16:
+      load_in_4bit: false
+      torch_dtype: "float16"
+      device_map: "auto"
+      vram_required_gb: 16
+      description: "Full FP16 — requires 16+ GB VRAM"
+
+  # Generation parameters
+  generation:
+    max_new_tokens: 512
+    temperature: 0.2
+    top_p: 0.7
+    do_sample: false
+    num_beams: 1
+
+  # Task-specific prompts
+  prompts:
+    vqa: "<image>\n{question}"
+    caption: "<image>\nDescribe this satellite image in detail."
+    grounding: "<image>\nLocate the {query} in this image and provide its bounding box coordinates."
+
+# Supported capabilities
+capabilities:
+  - vqa
+  - caption
+  - grounding
+  - scene_classification

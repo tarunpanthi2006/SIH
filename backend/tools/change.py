@@ -1,24 +1,60 @@
 """
+<<<<<<< HEAD
 SatQuery — Change Detection Tool
 ==================================
 
 Agent-callable wrapper around the ChangeFormer inference pipeline.
 Implements the ``SpecialistTool`` interface so Person 1's tool registry
 can invoke it with ``await tool.run(...)``.
+=======
+SatQuery Change-VQA Tool — Person 1 Interface
+================================================
+Bi-temporal change interpretation for remote sensing imagery.
+
+Consumes Person 3's ChangeFormer output (change mask) and uses
+the VLM to provide semantic interpretation of detected changes.
+
+Pipeline:
+    P3 ChangeFormer → change mask
+                ↓
+    P2 Change-VQA → "What changed?", "Where?", "How much?"
+
+Usage:
+    from backend.tools.change import run_change_vqa
+
+    result = run_change_vqa(
+        image_a="path/to/before.png",
+        image_b="path/to/after.png",
+        question="What changed between these two images?",
+        change_mask="path/to/change_mask.png",  # from P3
+    )
+>>>>>>> origin/feature/vlm
 """
 
 from __future__ import annotations
 
 import logging
+<<<<<<< HEAD
 from pathlib import Path
 from typing import Any
 
 from backend.tools.contracts import SpecialistOutput, TaskType, make_error
 from backend.tools.interfaces import SpecialistTool
+=======
+import os
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+from PIL import Image
+
+from backend.tools.interfaces import ToolResult, validate_image_path, Timer
+>>>>>>> origin/feature/vlm
 
 logger = logging.getLogger(__name__)
 
 
+<<<<<<< HEAD
 class ChangeTool(SpecialistTool):
     """
     Bi-temporal change detection tool.

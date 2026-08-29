@@ -1,4 +1,3 @@
-"""
 SatQuery — ChangeFormer Inference Pipeline
 ============================================
 
