@@ -1,0 +1,56 @@
+# ============================================================
+# SatQuery — Tool Registry Configuration
+# ============================================================
+
+tools:
+  run_vqa:
+    module: "backend.tools.vqa"
+    function: "run_vqa"
+    description: "Single-image Visual Question Answering for remote sensing imagery"
+    parameters:
+      image_path:
+        type: string
+        required: true
+        description: "Path to the satellite/RS image"
+      question:
+        type: string
+        required: true
+        description: "Natural language question about the image"
+    returns:
+      task: "vqa"
+      schema: "ToolResult"
+
+  run_caption:
+    module: "backend.tools.caption"
+    function: "run_caption"
+    description: "Generate a detailed scene description of a remote sensing image"
+    parameters:
+      image_path:
+        type: string
+        required: true
+        description: "Path to the satellite/RS image"
+      instruction:
+        type: string
+        required: false
+        default: "Describe this satellite image in detail."
+        description: "Optional custom captioning instruction"
+    returns:
+      task: "caption"
+      schema: "ToolResult"
+
+  run_grounding:
+    module: "backend.tools.grounding"
+    function: "run_grounding"
+    description: "Locate and highlight a specific object or feature in a remote sensing image"
+    parameters:
+      image_path:
+        type: string
+        required: true
+        description: "Path to the satellite/RS image"
+      query:
+        type: string
+        required: true
+        description: "What to locate, e.g. 'water body', 'buildings', 'forest area'"
+    returns:
+      task: "grounding"
+      schema: "ToolResult"

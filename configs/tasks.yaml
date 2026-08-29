@@ -1,0 +1,39 @@
+# ============================================================
+# SatQuery — Task Definitions
+# ============================================================
+
+# Maps user query intents to tool chains.
+# Person 1's agent uses this to route queries to the right tools.
+
+tasks:
+  single_image_vqa:
+    description: "Answer a question about a single satellite image"
+    tools: ["run_vqa"]
+    requires: ["image", "question"]
+    owner: "person2"
+
+  scene_description:
+    description: "Describe the contents of a satellite image"
+    tools: ["run_caption"]
+    requires: ["image"]
+    owner: "person2"
+
+  object_localization:
+    description: "Locate a specific object or feature in a satellite image"
+    tools: ["run_grounding"]
+    requires: ["image", "query"]
+    owner: "person2"
+
+  # Person 3 tasks (defined here for reference, implemented by Person 3)
+  change_detection:
+    description: "Detect changes between two temporal satellite images"
+    tools: ["run_change_detection"]
+    requires: ["image_a", "image_b"]
+    owner: "person3"
+
+  change_vqa:
+    description: "Answer questions about changes between two satellite images"
+    tools: ["run_change_detection", "run_vqa"]
+    requires: ["image_a", "image_b", "question"]
+    owner: "person3+person2"
+    notes: "Person 3 produces change mask, Person 2 VLM interprets it"
