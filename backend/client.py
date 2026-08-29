@@ -123,6 +123,49 @@ class SatQueryClient:
         resp.raise_for_status()
         return resp.json()
 
+    def change_vqa(
+        self,
+        image_before: str,
+        image_after: str,
+        question: str = "What changes are visible between the two time periods?",
+        change_mask: str | None = None,
+    ) -> dict:
+        """
+        Bi-temporal change interpretation.
+
+        Args:
+            image_before: Path to T1 (before) image
+            image_after: Path to T2 (after) image
+            question: Question about the change
+            change_mask: Optional path to P3's binary change mask
+
+        Returns:
+            ToolResult dict with change interpretation
+        """
+        files = {}
+        with open(image_before, "rb") as fa, open(image_after, "rb") as fb:
+            files["image_before"] = (Path(image_before).name, fa, "image/png")
+            files["image_after"] = (Path(image_after).name, fb, "image/png")
+
+            if change_mask:
+                fm = open(change_mask, "rb")
+                files["change_mask"] = (Path(change_mask).name, fm, "image/png")
+
+            data = {"question": question}
+
+            resp = requests.post(
+                f"{self.base_url}/change-vqa",
+                files=files,
+                data=data,
+                timeout=self.timeout,
+            )
+
+            if change_mask:
+                fm.close()
+
+        resp.raise_for_status()
+        return resp.json()
+
 
 # ============================================================
 # Convenience functions (drop-in replacements for direct imports)
@@ -131,6 +174,7 @@ class SatQueryClient:
 #   run_vqa(image_path, question) → dict
 #   run_caption(image_path) → dict
 #   run_grounding(image_path, query) → dict
+#   run_change_vqa(image_a, image_b, question, mask) → dict
 
 _client: SatQueryClient | None = None
 
@@ -157,6 +201,16 @@ def run_caption(image_path: str, instruction: str | None = None) -> dict:
 def run_grounding(image_path: str, query: str) -> dict:
     """Remote Grounding — same interface as backend.tools.grounding.run_grounding"""
     return _get_client().grounding(image_path, query)
+
+
+def run_change_vqa(
+    image_a: str,
+    image_b: str,
+    question: str = "What changes are visible?",
+    change_mask: str | None = None,
+) -> dict:
+    """Remote Change-VQA — same interface as backend.tools.change.run_change_vqa"""
+    return _get_client().change_vqa(image_a, image_b, question, change_mask)
 
 
 # CLI test

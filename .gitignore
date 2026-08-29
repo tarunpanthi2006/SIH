@@ -79,3 +79,12 @@ Thumbs.db
 
 # ----- HuggingFace cache -----
 .cache/
+
+# ----- Large compressed archives -----
+*.tar.zst
+*.tar.gz
+*.tar.bz2
+*.zip
+
+# ----- Model offload -----
+models/offload/

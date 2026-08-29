@@ -122,32 +122,30 @@ def compute_caption_metrics(predictions: list[str], references: list[str]) -> di
 
 
 def compute_grounding_iou(
-    pred_bboxes: list[list[float]],
-    ref_bboxes: list[list[float]],
+    pred_bboxes_list: list[list[list[float]]],
+    ref_bboxes_list: list[list[list[float]]],
     iou_threshold: float = 0.5,
 ) -> dict:
-    """Compute IoU-based grounding accuracy."""
-
-    def iou(box_a, box_b):
-        x1 = max(box_a[0], box_b[0])
-        y1 = max(box_a[1], box_b[1])
-        x2 = min(box_a[2], box_b[2])
-        y2 = min(box_a[3], box_b[3])
-
-        inter = max(0, x2 - x1) * max(0, y2 - y1)
-        area_a = (box_a[2] - box_a[0]) * (box_a[3] - box_a[1])
-        area_b = (box_b[2] - box_b[0]) * (box_b[3] - box_b[1])
-        union = area_a + area_b - inter
-
-        return inter / max(union, 1e-6)
-
+    """Compute IoU-based grounding accuracy using the new metrics.py."""
+    from evaluation.metrics import compute_iou
+    
     hits = 0
-    total = len(ref_bboxes)
+    total = 0
 
-    for pred, ref in zip(pred_bboxes, ref_bboxes):
-        if pred and ref:
-            score = iou(pred, ref)
-            if score >= iou_threshold:
+    for preds, refs in zip(pred_bboxes_list, ref_bboxes_list):
+        if not refs:
+            continue
+        total += len(refs)
+        
+        # Simple greedy matching for demonstration
+        for ref in refs:
+            best_iou = 0.0
+            for pred in preds:
+                score = compute_iou(pred, ref)
+                if score > best_iou:
+                    best_iou = score
+                    
+            if best_iou >= iou_threshold:
                 hits += 1
 
     return {
@@ -243,6 +241,50 @@ def evaluate_model(
             results["caption"] = compute_caption_metrics(cap_preds, cap_refs)
             logger.info(f"Caption results: {results['caption']}")
 
+    # Grounding evaluation & Visualization
+    if grounding_samples:
+        logger.info(f"Evaluating grounding on {len(grounding_samples)} samples...")
+        from evaluation.visualize import draw_grounding_boxes
+        
+        grounding_preds = []
+        grounding_refs = []
+        
+        vis_dir = Path("evaluation/visualizations")
+        vis_dir.mkdir(parents=True, exist_ok=True)
+        
+        for idx, sample in enumerate(grounding_samples[:max_samples]):
+            image_path = sample.get("image", "")
+            question = sample["conversations"][0]["value"].replace("<image>\n", "")
+            reference = sample["conversations"][1]["value"]
+            
+            if os.path.exists(image_path):
+                try:
+                    # Grounding inference returns the text answer with bounding boxes
+                    pred, _ = grounding_inference(image_path, question)
+                    pred_boxes = parse_bounding_boxes(pred)
+                    ref_boxes = parse_bounding_boxes(reference)
+                    
+                    grounding_preds.append(pred_boxes)
+                    grounding_refs.append(ref_boxes)
+                    
+                    # Generate a visualization for the first 5 samples!
+                    if idx < 5 and pred_boxes:
+                        out_file = vis_dir / f"{model_label}_grounding_{idx}.png"
+                        draw_grounding_boxes(
+                            image_path=image_path,
+                            boxes=pred_boxes,
+                            labels=["AI Prediction"] * len(pred_boxes),
+                            output_path=out_file
+                        )
+                        logger.info(f"Saved visualization: {out_file}")
+                        
+                except Exception as e:
+                    logger.warning(f"Grounding failed: {e}")
+
+        if grounding_preds:
+            results["grounding"] = compute_grounding_iou(grounding_preds, grounding_refs)
+            logger.info(f"Grounding results: {results['grounding']}")
+
     return results
 
 
@@ -282,7 +324,7 @@ def compare_base_vs_adapted(test_data_path: str, max_samples: int = 200) -> dict
     logger.info(f"{'Metric':<30} {'Base':>12} {'Adapted':>12} {'Delta':>12}")
     logger.info("-" * 66)
 
-    for task in ["vqa", "caption"]:
+    for task in ["vqa", "caption", "grounding"]:
         if task in base_results and task in adapted_results:
             for metric, base_val in base_results[task].items():
                 if metric == "total":

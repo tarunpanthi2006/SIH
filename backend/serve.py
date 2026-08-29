@@ -125,7 +125,7 @@ async def health():
 async def root():
     return {
         "service": "SatQuery-RS Model Server",
-        "endpoints": ["/vqa", "/caption", "/grounding", "/health"],
+        "endpoints": ["/vqa", "/caption", "/grounding", "/change-vqa", "/health"],
     }
 
 
@@ -207,6 +207,54 @@ async def grounding_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         Path(image_path).unlink(missing_ok=True)
+
+
+# ============================================================
+# Change-VQA Endpoint
+# ============================================================
+
+@app.post("/change-vqa")
+async def change_vqa_endpoint(
+    image_before: UploadFile = File(..., description="Before (T1) satellite image"),
+    image_after: UploadFile = File(..., description="After (T2) satellite image"),
+    question: str = Form(
+        default="What changes are visible between the two time periods?",
+        description="Question about the change",
+    ),
+    change_mask: UploadFile | None = File(
+        default=None,
+        description="Optional change mask from ChangeFormer (binary PNG)",
+    ),
+):
+    """
+    Bi-temporal change interpretation.
+
+    Upload before/after images and optionally a change mask from P3's
+    ChangeFormer. Returns a semantic interpretation of what changed.
+    """
+    image_a_path = await save_upload(image_before)
+    image_b_path = await save_upload(image_after)
+    mask_path = None
+
+    try:
+        if change_mask is not None:
+            mask_path = await save_upload(change_mask)
+
+        from backend.tools.change import run_change_vqa
+        result = run_change_vqa(
+            image_a=image_a_path,
+            image_b=image_b_path,
+            question=question,
+            change_mask=mask_path,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        Path(image_a_path).unlink(missing_ok=True)
+        Path(image_b_path).unlink(missing_ok=True)
+        if mask_path:
+            Path(mask_path).unlink(missing_ok=True)
 
 
 # ============================================================

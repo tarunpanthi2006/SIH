@@ -155,7 +155,11 @@ def create_rgb_composites(
     composites_dir = output_dir / "rgb"
     composites_dir.mkdir(parents=True, exist_ok=True)
 
-    patch_dirs = sorted([d for d in images_dir.iterdir() if d.is_dir()])
+    # BigEarthNet v2.0 nests patches inside scene directories (e.g. images/scene_id/patch_id)
+    # We use rglob to find all directories that actually contain a B04 file.
+    patch_dirs = set(f.parent for f in images_dir.rglob("*_B04.tif"))
+    patch_dirs = sorted(list(patch_dirs))
+    
     if max_patches:
         patch_dirs = patch_dirs[:max_patches]
 
