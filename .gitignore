@@ -1,0 +1,11 @@
+checkpoints/
+*.pth
+*.pt
+*.bin
+*.safetensors
+__pycache__/
+*.pyc
+.venv/
+*.tif
+*.tiff
+outputs/
