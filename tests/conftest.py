@@ -128,16 +128,15 @@ def mock_registry():
     from backend.tools.vqa import MockVQATool
     from backend.tools.caption import MockCaptionTool
     from backend.tools.grounding import MockGroundingTool
-    from backend.tools.change import MockChangeDetectionTool, MockChangeVQATool
-    from backend.tools.optical_sar import MockOpticalSARTool
-    from backend.tools.multispectral import MockMultispectralTool
+    from backend.tools.change import ChangeTool
+    from backend.tools.optical_sar import OpticalSarTool
+    from backend.tools.multispectral import MultispectralTool
 
     reg = ToolRegistry()
     reg.register(MockVQATool())
     reg.register(MockCaptionTool())
     reg.register(MockGroundingTool())
-    reg.register(MockChangeDetectionTool())
-    reg.register(MockChangeVQATool())
-    reg.register(MockOpticalSARTool())
-    reg.register(MockMultispectralTool())
+    reg.register(ChangeTool())
+    reg.register(OpticalSarTool())
+    reg.register(MultispectralTool())
     return reg

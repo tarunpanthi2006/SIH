@@ -17,13 +17,15 @@ from backend.agent.registry import get_registry, reset_registry
 from backend.api.routes import router as api_router
 from backend.config import get_settings
 
-# -- Tool imports (mock or real) --
+# -- Tool imports --
 from backend.tools.caption import MockCaptionTool
-from backend.tools.change import MockChangeDetectionTool, MockChangeVQATool
 from backend.tools.grounding import MockGroundingTool
-from backend.tools.multispectral import MockMultispectralTool
-from backend.tools.optical_sar import MockOpticalSARTool
 from backend.tools.vqa import MockVQATool
+
+# -- Real Models --
+from backend.tools.change import ChangeTool
+from backend.tools.multispectral import MultispectralTool
+from backend.tools.optical_sar import OpticalSarTool
 
 
 @asynccontextmanager
@@ -78,36 +80,21 @@ def create_app() -> FastAPI:
 def _register_tools(mock_mode: bool) -> None:
     """
     Register all tools in the global registry.
-
-    When ``mock_mode`` is True, register mock implementations.
-    When False, register real implementations (Person 2 / 3 will
-    provide these — for now they fall back to mocks).
     """
     registry = get_registry()
 
-    if mock_mode:
-        # -- Mock tools --
-        registry.register(MockVQATool())
-        registry.register(MockCaptionTool())
-        registry.register(MockGroundingTool())
-        registry.register(MockChangeDetectionTool())
-        registry.register(MockChangeVQATool())
-        registry.register(MockOpticalSARTool())
-        registry.register(MockMultispectralTool())
-    else:
-        # -- Real tools (to be implemented by Person 2 / 3) --
-        # For now, fall back to mocks to keep the system runnable.
-        registry.register(MockVQATool())
-        registry.register(MockCaptionTool())
-        registry.register(MockGroundingTool())
-        registry.register(MockChangeDetectionTool())
-        registry.register(MockChangeVQATool())
-        registry.register(MockOpticalSARTool())
-        registry.register(MockMultispectralTool())
-        logging.getLogger("satquery").warning(
-            "MOCK_MODE is off but real tools are not yet integrated — "
-            "falling back to mock implementations."
-        )
+    # -- Always register these mocks until real VQA models are ready --
+    registry.register(MockVQATool())
+    registry.register(MockCaptionTool())
+    registry.register(MockGroundingTool())
+
+    # -- Register the real Specialist Models --
+    registry.register(ChangeTool())
+    registry.register(MultispectralTool())
+    registry.register(OpticalSarTool())
+
+    if not mock_mode:
+        logging.getLogger("satquery").info("Registered real ML tools for specialist tasks.")
 
 
 # -- Module-level app instance for uvicorn --

@@ -27,6 +27,7 @@ class OpticalSarTool(SpecialistTool):
     """
 
     name = "optical_sar_analysis"
+    task = TaskType.OPTICAL_SAR
     description = (
         "Perform cross-modal analysis on paired, co-registered optical and SAR images. "
         "Useful for land-cover classification and identifying objects using both modalities."

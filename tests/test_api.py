@@ -17,9 +17,9 @@ from backend.agent.registry import get_registry
 from backend.tools.vqa import MockVQATool
 from backend.tools.caption import MockCaptionTool
 from backend.tools.grounding import MockGroundingTool
-from backend.tools.change import MockChangeDetectionTool, MockChangeVQATool
-from backend.tools.optical_sar import MockOpticalSARTool
-from backend.tools.multispectral import MockMultispectralTool
+from backend.tools.change import ChangeTool
+from backend.tools.optical_sar import OpticalSarTool
+from backend.tools.multispectral import MultispectralTool
 
 
 @pytest.fixture
@@ -57,15 +57,14 @@ class TestToolsEndpoint:
         assert resp.status_code == 200
         tools = resp.json()
         assert isinstance(tools, list)
-        assert len(tools) >= 7
+        assert len(tools) >= 6
         names = {t["name"] for t in tools}
         assert "vqa" in names
         assert "caption" in names
         assert "grounding" in names
         assert "change_detection" in names
-        assert "change_vqa" in names
-        assert "optical_sar" in names
-        assert "multispectral" in names
+        assert "optical_sar_analysis" in names
+        assert "multispectral_analysis" in names
 
 
 class TestTasksEndpoint:

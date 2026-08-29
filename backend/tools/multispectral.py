@@ -23,6 +23,7 @@ class MultispectralTool(SpecialistTool):
     """
 
     name = "multispectral_analysis"
+    task = TaskType.MULTISPECTRAL
     description = (
         "Analyze multispectral imagery (e.g., 6-band HLS data) using a foundation model. "
         "Useful for vegetation, agriculture, and general multispectral feature extraction."

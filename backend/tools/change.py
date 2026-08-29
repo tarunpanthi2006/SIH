@@ -32,6 +32,7 @@ class ChangeTool(SpecialistTool):
     """
 
     name = "change_detection"
+    task = TaskType.CHANGE_DETECTION
     description = (
         "Detect spatial changes between two co-registered images "
         "(bi-temporal change detection using ChangeFormer)."

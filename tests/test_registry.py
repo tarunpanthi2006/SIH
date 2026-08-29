@@ -28,11 +28,11 @@ class TestToolRegistry:
 
     def test_list_tools(self, mock_registry):
         tools = mock_registry.list_tools()
-        assert len(tools) == 7
+        assert len(tools) == 6
         names = {t.name for t in tools}
         assert "vqa" in names
         assert "change_detection" in names
-        assert "optical_sar" in names
+        assert "optical_sar_analysis" in names
 
     def test_list_for_task(self, mock_registry):
         vqa_tools = mock_registry.list_for_task(TaskType.VQA)
