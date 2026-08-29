@@ -162,7 +162,7 @@ def make_error(
     return SpecialistOutput(
         task=task,
         model=model,
-        answer="",
+        answer=f"[ERROR] {error_message}",
         confidence=0.0,
         is_error=True,
         error_message=error_message,
