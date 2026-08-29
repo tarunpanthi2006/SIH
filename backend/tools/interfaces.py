@@ -1,22 +1,12 @@
 """
-<<<<<<< HEAD
 SatQuery — Tool Interfaces
 
 Defines the abstract base class that every tool (mock or real) must implement.
 Includes the SpecialistTool adapter for ML models.
-=======
-SatQuery Tool Interfaces — Common Output Contract
-===================================================
-All tool wrappers (VQA, Caption, Grounding) return ToolResult objects
-that conform to the agreed JSON schema for Person 1's agent to consume.
-
-This module is Person 2's contract with Person 1.
->>>>>>> origin/feature/vlm
 """
 
 from __future__ import annotations
 
-<<<<<<< HEAD
 import abc
 import asyncio
 import inspect
