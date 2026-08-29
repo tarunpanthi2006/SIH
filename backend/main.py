@@ -1,5 +1,4 @@
 """
-<<<<<<< HEAD
 SatQuery — Application Entry Point
 
 Creates the FastAPI app, registers tools, and mounts the API router.
