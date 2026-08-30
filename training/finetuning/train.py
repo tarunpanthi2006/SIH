@@ -162,6 +162,12 @@ def setup_model_and_tokenizer(config: dict):
     lora_config = config["lora"]
     quant_config = config.get("quantization", {})
 
+    # Workaround for GeoChat config mapping issue
+    from transformers.models.auto.configuration_auto import CONFIG_MAPPING
+    from transformers.models.llama.configuration_llama import LlamaConfig
+    if "geochat" not in CONFIG_MAPPING:
+        CONFIG_MAPPING.register("geochat", LlamaConfig)
+
     # Tokenizer
     logger.info(f"Loading tokenizer: {base_model}")
     tokenizer = AutoTokenizer.from_pretrained(

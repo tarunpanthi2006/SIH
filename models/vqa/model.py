@@ -102,16 +102,22 @@ class SatQueryVLM:
             raise
 
     def _load_model(self, mode: str, base_model: str, lora_adapter: str) -> None:
-        """Internal model loading logic with mode-specific configuration."""
+        """Load the base model and tokenizer with appropriate settings."""
         from transformers import (
             AutoTokenizer,
             AutoModelForCausalLM,
             BitsAndBytesConfig,
             CLIPImageProcessor,
         )
+        from peft import PeftModel
 
-        # Load tokenizer
-        logger.info("Loading tokenizer...")
+        # Workaround for GeoChat config mapping issue
+        from transformers.models.auto.configuration_auto import CONFIG_MAPPING
+        from transformers.models.llama.configuration_llama import LlamaConfig
+        if "geochat" not in CONFIG_MAPPING:
+            CONFIG_MAPPING.register("geochat", LlamaConfig)
+
+        # Tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(
             base_model,
             use_fast=False,
