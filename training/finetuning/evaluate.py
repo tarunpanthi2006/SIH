@@ -203,9 +203,12 @@ def compute_perplexity_comparison(
 ) -> dict:
     """
     Compute per-sample perplexity for both base and adapted models.
-    This is a loss-based metric that does NOT require generation (fast!).
-    
-    Returns comparison of average cross-entropy loss.
+
+    ✅ NO IMAGES REQUIRED — this is a pure text-based loss comparison.
+    The model reads the question+answer text and measures how "surprised"
+    it is by the correct answer. Lower loss = model learned better.
+
+    Returns comparison of average cross-entropy loss and perplexity.
     """
     from models.vqa.model import SatQueryVLM, get_model
 
@@ -214,7 +217,7 @@ def compute_perplexity_comparison(
     for model_type in ["adapted", "base"]:
         logger.info(f"\n  Computing perplexity for {model_type} model...")
 
-        # Reload model
+        # Reload model cleanly
         if SatQueryVLM._instance:
             SatQueryVLM._instance.unload()
             SatQueryVLM._instance = None
@@ -223,7 +226,7 @@ def compute_perplexity_comparison(
             os.environ["LORA_ADAPTER_PATH"] = "__none__"
         else:
             os.environ.pop("LORA_ADAPTER_PATH", None)
-            # Reload from .env
+            # Reload .env so the correct adapter path is picked up
             from dotenv import load_dotenv
             load_dotenv(override=True)
 
@@ -232,13 +235,22 @@ def compute_perplexity_comparison(
         tokenizer = vlm.tokenizer
 
         losses = []
+        skipped = 0
+
         for i, sample in enumerate(test_data[:max_samples]):
             conversations = sample.get("conversations", [])
             if len(conversations) < 2:
+                skipped += 1
                 continue
 
-            human_turn = conversations[0].get("value", "")
-            gpt_turn = conversations[1].get("value", "")
+            human_turn = conversations[0].get("value", "").replace("<image>\n", "").strip()
+            gpt_turn = conversations[1].get("value", "").strip()
+
+            if not human_turn or not gpt_turn:
+                skipped += 1
+                continue
+
+            # Pure text prompt — no images needed!
             prompt = f"USER: {human_turn}\nASSISTANT: {gpt_turn}</s>"
 
             encoded = tokenizer(
@@ -252,29 +264,50 @@ def compute_perplexity_comparison(
             if torch.cuda.is_available():
                 input_ids = input_ids.to("cuda")
 
-            with torch.inference_mode():
-                outputs = model(input_ids=input_ids, labels=input_ids)
-                loss = outputs.loss.item()
-                losses.append(loss)
+            try:
+                with torch.inference_mode():
+                    # Pass labels=input_ids so the model computes cross-entropy loss
+                    # No images= kwarg — text-only forward pass
+                    outputs = model(input_ids=input_ids, labels=input_ids)
+                    if outputs.loss is not None:
+                        loss = outputs.loss.item()
+                        if not math.isnan(loss) and not math.isinf(loss):
+                            losses.append(loss)
+            except Exception as e:
+                logger.debug(f"Perplexity sample failed: {e}")
+                skipped += 1
+                continue
 
             if (i + 1) % 50 == 0:
-                avg_so_far = sum(losses) / len(losses)
-                logger.info(f"    [{model_type}] {i+1}/{min(max_samples, len(test_data))} "
-                           f"avg_loss={avg_so_far:.4f}")
+                avg_so_far = sum(losses) / max(len(losses), 1)
+                logger.info(
+                    f"    [{model_type}] {i+1}/{min(max_samples, len(test_data))} "
+                    f"avg_loss={avg_so_far:.4f} (skipped={skipped})"
+                )
 
-        avg_loss = sum(losses) / max(len(losses), 1)
+        if not losses:
+            logger.warning(f"  ⚠️  No valid samples for {model_type} — all skipped!")
+            results[model_type] = {"avg_loss": None, "perplexity": None, "num_samples": 0}
+            continue
+
+        avg_loss = sum(losses) / len(losses)
         perplexity = math.exp(min(avg_loss, 100))  # Cap to prevent overflow
 
         results[model_type] = {
             "avg_loss": round(avg_loss, 4),
             "perplexity": round(perplexity, 2),
             "num_samples": len(losses),
+            "skipped": skipped,
         }
-
-        logger.info(f"  {model_type}: avg_loss={avg_loss:.4f}, perplexity={perplexity:.2f}")
+        logger.info(
+            f"  ✅ {model_type}: avg_loss={avg_loss:.4f}, "
+            f"perplexity={perplexity:.2f} ({len(losses)} samples)"
+        )
 
     # Compute improvement
-    if "base" in results and "adapted" in results:
+    if ("base" in results and "adapted" in results
+            and results["base"]["avg_loss"] is not None
+            and results["adapted"]["avg_loss"] is not None):
         loss_improvement = results["base"]["avg_loss"] - results["adapted"]["avg_loss"]
         ppl_improvement = results["base"]["perplexity"] - results["adapted"]["perplexity"]
         results["improvement"] = {
@@ -286,6 +319,7 @@ def compute_perplexity_comparison(
         }
 
     return results
+
 
 
 # ============================================================
