@@ -149,11 +149,13 @@ patch_col  = next((c for c in df.columns if "patch" in c.lower()), None)
 type_col   = next((c for c in df.columns if c.lower() in ("type", "task_type", "category")), None)
 
 if split_col:
-    val_df = df[df[split_col] == "val"].head(500)
+    val_df = df[df[split_col].isin(["val", "validation"])].head(500)
+    if len(val_df) == 0:
+        val_df = df.head(500)
 else:
     val_df = df.head(500)
 
-print(f"  Val samples: {len(val_df)}")
+print(f"  Val samples found: {len(val_df)}")
 
 samples = []
 for _, row in val_df.iterrows():
@@ -178,7 +180,14 @@ with open(out_path, "w") as f:
 print(f"  ✅ val_small.json created with {len(samples)} samples → {out_path}")
 EOF
 else
-    COUNT=$(python -c "import json; d=json.load(open('datasets/bigearthnet/processed/val_small.json')); print(len(d))")
+    COUNT=$(python -c "import json; d=json.load(open('datasets/bigearthnet/processed/val_small.json')); print(len(d))" 2>/dev/null || echo "0")
+    if [ "$COUNT" = "0" ]; then
+        echo "  ⚠️  val_small.json exists but is empty! Deleting and regenerating..."
+        rm datasets/bigearthnet/processed/val_small.json
+        # Re-run step 4 by recursively calling this script to trigger generation again
+        bash "$0"
+        exit 0
+    fi
     echo "  ✅ val_small.json already exists ($COUNT samples)"
 fi
 
