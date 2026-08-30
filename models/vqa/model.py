@@ -41,7 +41,7 @@ def _get_config() -> dict[str, Any]:
         "lora_adapter": os.getenv("LORA_ADAPTER_PATH", "models/checkpoints/satquery-rs-vlm"),
         "vision_tower": os.getenv("VISION_TOWER", "openai/clip-vit-large-patch14-336"),
         "mode": os.getenv("SATQUERY_MODE", "cpu-offload"),
-        "device_map": os.getenv("DEVICE_MAP", "auto"),
+        "device_map": os.getenv("DEVICE_MAP", '{"": 0}'),
     }
 
 

@@ -198,7 +198,7 @@ def setup_model_and_tokenizer(config: dict):
     model_kwargs = {
         "trust_remote_code": True,
         "low_cpu_mem_usage": True,
-        "device_map": "auto",
+        "device_map": {"": 0},  # Forces everything onto GPU 0 and bypasses accelerate dispatch crash
     }
     if bnb_config:
         model_kwargs["quantization_config"] = bnb_config
