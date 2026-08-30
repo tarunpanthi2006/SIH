@@ -61,7 +61,7 @@ training:
   # HuggingFace Hub push — checkpoint survival across accounts
   push_to_hub: true
   hub_strategy: "every_save"         # Push every checkpoint to HF
-  hub_model_id: "tarunpanthi2006/satquery-rs-vlm" # Push to your repo
+  hub_model_id: "Sh1vam26/satquery-rs-vlm" # Push to your repo
   hub_private_repo: true
 
   # Resume from checkpoint
