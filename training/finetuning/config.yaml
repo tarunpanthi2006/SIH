@@ -35,7 +35,7 @@ quantization:
 
 # Training hyperparameters
 training:
-  epochs: 3
+  epochs: 5
   per_device_train_batch_size: 4
   per_device_eval_batch_size: 4
   gradient_accumulation_steps: 8    # Effective batch = 4 * 8 = 32
@@ -61,7 +61,7 @@ training:
   # HuggingFace Hub push — checkpoint survival across accounts
   push_to_hub: true
   hub_strategy: "every_save"         # Push every checkpoint to HF
-  hub_model_id: ""                   # Set via HF_HUB_REPO env var
+  hub_model_id: "tarunpanthi2006/satquery-rs-vlm" # Push to your repo
   hub_private_repo: true
 
   # Resume from checkpoint
