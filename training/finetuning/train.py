@@ -313,7 +313,7 @@ def train(config_path: str, debug: bool = False, small: bool = False, resume_fro
         fp16=train_config.get("fp16", False),
         gradient_checkpointing=train_config.get("gradient_checkpointing", True),
         logging_steps=train_config.get("logging_steps", 10),
-        eval_strategy=train_config.get("eval_strategy", "steps") if eval_dataset else "no",
+        evaluation_strategy=train_config.get("eval_strategy", "steps") if eval_dataset else "no",
         eval_steps=train_config.get("eval_steps", 250) if eval_dataset else None,
         save_steps=train_config.get("save_steps", 250),
         save_total_limit=train_config.get("save_total_limit", 3),
