@@ -36,10 +36,15 @@ load_dotenv()
 import uvicorn
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
+import asyncio
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
+
+# Global lock to prevent concurrent GPU CUDA OOM crashes
+# Ensures only one inference request runs at a time
+gpu_lock = asyncio.Lock()
 
 # ============================================================
 # Lifespan: pre-load model at startup
@@ -92,7 +97,7 @@ UPLOAD_DIR = Path(tempfile.mkdtemp(prefix="satquery_"))
 async def save_upload(file: UploadFile) -> str:
     """Save an uploaded file to a temp location and return the path."""
     suffix = Path(file.filename or "image.png").suffix or ".png"
-    temp_path = UPLOAD_DIR / f"{int(time.time() * 1000)}{suffix}"
+    temp_path = UPLOAD_DIR / f"{int(time.time() * 1000)}_{file.filename}"
 
     with open(temp_path, "wb") as f:
         content = await file.read()
@@ -147,12 +152,12 @@ async def vqa_endpoint(
 
     try:
         from backend.tools.vqa import run_vqa
-        result = run_vqa(image_path, question)
+        async with gpu_lock:
+            result = await run_in_threadpool(run_vqa, image_path, question)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        # Clean up uploaded file
         Path(image_path).unlink(missing_ok=True)
 
 
@@ -175,7 +180,8 @@ async def caption_endpoint(
 
     try:
         from backend.tools.caption import run_caption
-        result = run_caption(image_path, instruction=instruction)
+        async with gpu_lock:
+            result = await run_in_threadpool(run_caption, image_path, instruction=instruction)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -201,7 +207,8 @@ async def grounding_endpoint(
 
     try:
         from backend.tools.grounding import run_grounding
-        result = run_grounding(image_path, query)
+        async with gpu_lock:
+            result = await run_in_threadpool(run_grounding, image_path, query)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -241,12 +248,14 @@ async def change_vqa_endpoint(
             mask_path = await save_upload(change_mask)
 
         from backend.tools.change import run_change_vqa
-        result = run_change_vqa(
-            image_a=image_a_path,
-            image_b=image_b_path,
-            question=question,
-            change_mask=mask_path,
-        )
+        async with gpu_lock:
+            result = await run_in_threadpool(
+                run_change_vqa,
+                image_a=image_a_path,
+                image_b=image_b_path,
+                question=question,
+                change_mask=mask_path,
+            )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
