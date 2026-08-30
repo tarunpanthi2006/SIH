@@ -287,6 +287,78 @@ else
 fi
 
 # ─────────────────────────────────────────────
+# MAPPING VERIFICATION — confirm text↔image alignment
+# ─────────────────────────────────────────────
+echo ""
+echo "🔍 Verifying text ↔ image mapping..."
+python - <<'EOF'
+import json
+from pathlib import Path
+
+val_path = Path("datasets/bigearthnet/processed/val_small.json")
+rgb_dir  = Path("datasets/bigearthnet/rgb")
+
+if not val_path.exists():
+    print("  ⚠️  val_small.json not found — skipping verification")
+    exit(0)
+
+with open(val_path) as f:
+    data = json.load(f)
+
+# Check how many val samples have a matching image on disk
+matched   = 0
+missing   = 0
+no_path   = 0
+examples_missing = []
+
+for sample in data:
+    img_path = sample.get("image", "")
+    if not img_path:
+        no_path += 1
+        continue
+
+    img_file = Path(img_path)
+    if img_file.exists():
+        matched += 1
+    else:
+        missing += 1
+        if len(examples_missing) < 3:
+            examples_missing.append(img_path)
+
+total = len(data)
+match_pct = matched / max(total, 1) * 100
+
+print(f"  Total val samples : {total}")
+print(f"  ✅ Matched (image exists): {matched}  ({match_pct:.1f}%)")
+print(f"  ❌ Missing images        : {missing}")
+print(f"  ⚪ No image path         : {no_path}")
+
+if examples_missing:
+    print(f"\n  Example missing paths:")
+    for p in examples_missing:
+        print(f"    {p}")
+    # Show what IS in the rgb dir for comparison
+    sample_imgs = list(rgb_dir.glob("*.png"))[:3] if rgb_dir.exists() else []
+    if sample_imgs:
+        print(f"\n  Example images actually on disk:")
+        for img in sample_imgs:
+            print(f"    {img}")
+
+if match_pct >= 80:
+    print(f"\n  ✅ MAPPING IS GOOD — {match_pct:.0f}% of val samples have matching images!")
+    print(f"     Ready to run: python -m training.finetuning.evaluate --compare --max-samples 50")
+elif match_pct >= 30:
+    print(f"\n  ⚠️  PARTIAL MAPPING — only {match_pct:.0f}% matched.")
+    print(f"     The val split may use patches not in the tar.gz (which has train split images).")
+    print(f"     Eval will still work but on fewer samples.")
+else:
+    print(f"\n  ❌ MAPPING FAILED — images downloaded but patch IDs don't match!")
+    print(f"     The filenames in the tar.gz don't match the patch_ids in val_small.json.")
+    print(f"     Run perplexity eval instead (no images needed):")
+    print(f"       python -m training.finetuning.evaluate --perplexity --max-samples 100")
+EOF
+
+# ─────────────────────────────────────────────
 # STEP 6: Write .env and final checks
 # ─────────────────────────────────────────────
 echo ""
