@@ -375,6 +375,7 @@ def evaluate_model(
         logger.info(f"  Evaluating VQA on {len(vqa_samples)} samples...")
         vqa_preds = []
         vqa_refs = []
+        vqa_questions = []
         start_time = time.time()
 
         for i, sample in enumerate(vqa_samples):
@@ -388,6 +389,7 @@ def evaluate_model(
                     pred, _ = vqa_inference(image_path, question)
                     vqa_preds.append(pred)
                     vqa_refs.append(reference)
+                    vqa_questions.append(question)
                 except Exception as e:
                     logger.error(f"VQA failed: {e}", exc_info=True)
 
@@ -402,7 +404,7 @@ def evaluate_model(
             results["vqa"]["examples"] = [
                 {"question": q, "predicted": p, "reference": r}
                 for q, p, r in zip(
-                    [s["conversations"][0]["value"].replace("<image>\n", "") for s in vqa_samples[:5]],
+                    vqa_questions[:5],
                     vqa_preds[:5],
                     vqa_refs[:5],
                 )
