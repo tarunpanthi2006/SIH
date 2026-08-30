@@ -2,67 +2,88 @@
 # ============================================================
 # SatQuery-RS — Complete Lightning AI Setup Script
 # ============================================================
-# Run this ONCE on a fresh Lightning AI studio to set everything up.
-# Usage: bash scripts/setup_lightning.sh
+# This script handles EVERYTHING in one shot:
+#   1. Git pull latest code
+#   2. Install all dependencies
+#   3. Download LoRA checkpoint from HuggingFace Hub
+#   4. Download evaluation JSON data
+#   5. Download BigEarthNet images from HuggingFace (for full eval)
+#   6. Configure environment
+#
+# Usage:
+#   bash scripts/setup_lightning.sh          # Full setup with images
+#   bash scripts/setup_lightning.sh --no-images  # Skip image download
 # ============================================================
 
 set -e  # Exit immediately on any error
 
+DOWNLOAD_IMAGES=true
+if [[ "$1" == "--no-images" ]]; then
+    DOWNLOAD_IMAGES=false
+fi
+
+# ── Config ──────────────────────────────────────────────────
+HF_TOKEN="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"
+HF_CHECKPOINT_REPO="Sh1vam26/satquery-rs-vlm"
+HF_IMAGES_REPO="danielz01/BigEarthNet-S2-v1.0"
+PROJECT_DIR="/teamspace/studios/this_studio/SIH"
+# ────────────────────────────────────────────────────────────
+
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║       SatQuery-RS — Lightning AI Environment Setup          ║"
+echo "║     SatQuery-RS — Full Lightning AI Environment Setup       ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
 # ─────────────────────────────────────────────
-# STEP 1: Navigate to project root
+# STEP 1: Clone or pull repo
 # ─────────────────────────────────────────────
-echo "📁 [1/7] Navigating to project..."
-cd /teamspace/studios/this_studio/SIH
+echo "🔄 [1/6] Getting latest code..."
+if [ ! -d "$PROJECT_DIR" ]; then
+    cd /teamspace/studios/this_studio
+    git clone https://github.com/tarunpanthi2006/SIH.git
+    cd SIH
+    git checkout feature/vlm
+else
+    cd "$PROJECT_DIR"
+    git fetch origin feature/vlm
+    git checkout feature/vlm
+    git pull origin feature/vlm
+fi
+echo "✅ Code ready at: $PROJECT_DIR"
 
 # ─────────────────────────────────────────────
-# STEP 2: Pull latest code
+# STEP 2: Install Python dependencies
 # ─────────────────────────────────────────────
 echo ""
-echo "🔄 [2/7] Pulling latest code from GitHub..."
-git pull origin feature/vlm
-echo "✅ Code up to date"
-
-# ─────────────────────────────────────────────
-# STEP 3: Install Python dependencies
-# ─────────────────────────────────────────────
-echo ""
-echo "📦 [3/7] Installing Python dependencies..."
+echo "📦 [2/6] Installing Python dependencies..."
 pip install -q -r requirements.txt
-# Pin accelerate for transformers 4.36.x compatibility
+# Critical: pin accelerate for transformers 4.36.x compatibility
 pip install -q "accelerate==0.27.2"
-echo "✅ Dependencies installed"
+# Install rasterio for reading Sentinel-2 .tif files
+pip install -q rasterio 2>/dev/null || echo "  (rasterio optional — skipping)"
+echo "✅ All dependencies installed"
 
 # ─────────────────────────────────────────────
-# STEP 4: Download LoRA Checkpoint from Hub
+# STEP 3: Download LoRA Checkpoint from Hub
 # ─────────────────────────────────────────────
 echo ""
-echo "🤖 [4/7] Downloading LoRA checkpoint from HuggingFace Hub..."
-echo "    Repo: Sh1vam26/satquery-rs-vlm"
-echo "    This downloads checkpoint-1250 (the 0.6-loss model)"
-echo ""
-
+echo "🤖 [3/6] Downloading LoRA checkpoint (checkpoint-1250)..."
 mkdir -p models/checkpoints/satquery-rs-vlm
 
-python - <<'EOF'
+python - <<EOF
 import os
 from huggingface_hub import snapshot_download
 
-token = os.getenv("HF_TOKEN", "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")
-
-print("  Downloading... (may take 2-5 minutes)")
+print("  Downloading from: $HF_CHECKPOINT_REPO")
+print("  This may take 2-5 minutes...")
 snapshot_download(
-    repo_id="Sh1vam26/satquery-rs-vlm",
+    repo_id="$HF_CHECKPOINT_REPO",
     local_dir="models/checkpoints/satquery-rs-vlm",
     repo_type="model",
-    token=token,
+    token="$HF_TOKEN",
 )
-print("  ✅ Download complete!")
+print("  Download complete!")
 EOF
 
 # Fix nested checkpoints/ subfolder if Hub created one
@@ -73,113 +94,270 @@ if [ -d "models/checkpoints/satquery-rs-vlm/checkpoints" ]; then
     rmdir models/checkpoints/satquery-rs-vlm/checkpoints 2>/dev/null || true
 fi
 
-echo "✅ Checkpoint downloaded"
-echo ""
-echo "  Available checkpoints:"
-ls -d models/checkpoints/satquery-rs-vlm/checkpoint-* 2>/dev/null \
-    || echo "  (no checkpoint-* dirs found, check download above)"
+echo "✅ Checkpoint ready. Available:"
+ls -d models/checkpoints/satquery-rs-vlm/checkpoint-* 2>/dev/null || echo "  ⚠️  No checkpoint-* dirs found"
 
 # ─────────────────────────────────────────────
-# STEP 5: Download val_small.json (evaluation data)
+# STEP 4: Get evaluation JSON data
 # ─────────────────────────────────────────────
 echo ""
-echo "📊 [5/7] Checking evaluation data..."
+echo "📊 [4/6] Preparing evaluation data..."
 
-VAL_PATH="datasets/bigearthnet/processed/val_small.json"
-if [ -f "$VAL_PATH" ]; then
-    COUNT=$(python -c "import json; d=json.load(open('$VAL_PATH')); print(len(d))")
-    echo "✅ val_small.json already exists ($COUNT samples)"
+mkdir -p datasets/bigearthnet/processed
+
+if [ ! -f "datasets/bigearthnet/processed/val_small.json" ]; then
+    echo "  val_small.json not found — downloading from HuggingFace..."
+    python - <<'EOF'
+import json
+from pathlib import Path
+from huggingface_hub import hf_hub_download
+
+token = "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"
+
+try:
+    # Try downloading from your checkpoint repo (we push data there too)
+    path = hf_hub_download(
+        repo_id="Sh1vam26/satquery-rs-vlm",
+        filename="val_small.json",
+        repo_type="model",
+        local_dir="datasets/bigearthnet/processed",
+        token=token,
+    )
+    print(f"  Downloaded val_small.json from Hub: {path}")
+except Exception as e:
+    print(f"  Not found on Hub ({e})")
+    # Generate from BigEarthNet.txt parquet if available
+    parquet_path = Path("datasets/bigearthnet/raw/BigEarthNet.txt.parquet")
+    if parquet_path.exists():
+        import pandas as pd
+        import random
+        df = pd.read_parquet(parquet_path)
+        val_df = df[df["split"] == "val"].head(500)
+        samples = []
+        for _, row in val_df.iterrows():
+            samples.append({
+                "id": row.get("patch_id", f"sample_{len(samples)}"),
+                "image": f"datasets/bigearthnet/rgb/{row.get('patch_id','')}.png",
+                "conversations": [
+                    {"from": "human", "value": f"<image>\n{row.get('input', 'Describe this satellite image.')}"},
+                    {"from": "gpt",   "value": row.get("output", "")}
+                ],
+                "metadata": {"task_type": row.get("type", "captioning"), "patch_id": row.get("patch_id", "")}
+            })
+        with open("datasets/bigearthnet/processed/val_small.json", "w") as f:
+            json.dump(samples, f, indent=2)
+        print(f"  Generated val_small.json from parquet ({len(samples)} samples)")
+    else:
+        # Download the parquet first then generate
+        from huggingface_hub import hf_hub_download as hf_dl
+        try:
+            parquet = hf_dl(
+                repo_id="BIFOLD-BigEarthNetv2-0/BigEarthNet.txt",
+                filename="BigEarthNet.txt.parquet",
+                repo_type="dataset",
+                local_dir="datasets/bigearthnet/raw",
+                token=token,
+            )
+            import pandas as pd, random
+            df = pd.read_parquet(parquet)
+            val_df = df[df["split"] == "val"].head(500)
+            samples = []
+            for _, row in val_df.iterrows():
+                samples.append({
+                    "id": row.get("patch_id", f"sample_{len(samples)}"),
+                    "image": f"datasets/bigearthnet/rgb/{row.get('patch_id','')}.png",
+                    "conversations": [
+                        {"from": "human", "value": f"<image>\n{row.get('input', 'Describe this satellite image.')}"},
+                        {"from": "gpt",   "value": row.get("output", "")}
+                    ],
+                    "metadata": {"task_type": row.get("type", "captioning"), "patch_id": row.get("patch_id", "")}
+                })
+            with open("datasets/bigearthnet/processed/val_small.json", "w") as f:
+                json.dump(samples, f, indent=2)
+            print(f"  Generated val_small.json from BigEarthNet.txt parquet ({len(samples)} samples)")
+        except Exception as e2:
+            print(f"  Warning: Could not generate val data: {e2}")
+            print("  Will use text-only perplexity eval")
+EOF
 else
-    echo "  val_small.json not found — generating a text-only mini eval set..."
-    mkdir -p datasets/bigearthnet/processed
+    COUNT=$(python -c "import json; d=json.load(open('datasets/bigearthnet/processed/val_small.json')); print(len(d))")
+    echo "  ✅ val_small.json already exists ($COUNT samples)"
+fi
+
+echo "✅ Evaluation data ready"
+
+# ─────────────────────────────────────────────
+# STEP 5: Download BigEarthNet images (for full eval)
+# ─────────────────────────────────────────────
+echo ""
+if [ "$DOWNLOAD_IMAGES" = true ]; then
+    echo "🛰️  [5/6] Downloading BigEarthNet satellite images..."
+    echo "    Source: HuggingFace ($HF_IMAGES_REPO)"
+    echo "    This streams only the images referenced in val_small.json"
+    echo "    Estimated time: 15-30 minutes depending on GPU machine speed"
+    echo ""
+
+    mkdir -p datasets/bigearthnet/rgb
 
     python - <<'EOF'
-import json, random, os
+import json, os
+from pathlib import Path
 
-# Try to read from train.json if it exists, otherwise create dummy samples
-train_path = "datasets/bigearthnet/processed/train.json"
-val_path = "datasets/bigearthnet/processed/val_small.json"
+try:
+    import datasets as hf_datasets
+except ImportError:
+    import subprocess, sys
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "datasets"])
+    import datasets as hf_datasets
 
-if os.path.exists(train_path):
-    with open(train_path) as f:
-        data = json.load(f)
-    random.seed(42)
-    val = random.sample(data, min(200, len(data)))
-    with open(val_path, "w") as f:
-        json.dump(val, f, indent=2)
-    print(f"  Created val_small.json from train.json ({len(val)} samples)")
-else:
-    # Create minimal dummy eval set for perplexity testing
-    # (no images needed for --perplexity mode)
-    dummy = [
-        {
-            "id": f"dummy_{i}",
-            "image": "",
-            "conversations": [
-                {"from": "human", "value": f"What land cover type is visible in this satellite image?"},
-                {"from": "gpt", "value": random.choice([
-                    "This satellite image shows urban residential areas with mixed vegetation.",
-                    "The image depicts agricultural land with crop fields and irrigation patterns.",
-                    "Dense forest cover with deciduous trees is visible in this image.",
-                    "Industrial zones with buildings and paved surfaces dominate this scene.",
-                    "Wetlands and water bodies are visible with surrounding vegetation.",
-                ])}
-            ],
-            "metadata": {"task_type": "captioning"}
-        }
-        for i in range(100)
-    ]
-    with open(val_path, "w") as f:
-        json.dump(dummy, f, indent=2)
-    print(f"  Created minimal dummy val_small.json (100 text-only samples)")
-    print(f"  ⚠️  For real evaluation, you need the actual processed/ dataset")
+from PIL import Image
+
+rgb_dir = Path("datasets/bigearthnet/rgb")
+val_path = Path("datasets/bigearthnet/processed/val_small.json")
+
+if not val_path.exists():
+    print("  val_small.json not found — skipping image download")
+    exit(0)
+
+with open(val_path) as f:
+    data = json.load(f)
+
+# Get all unique patch IDs we need
+needed = set()
+for item in data:
+    img_path = item.get("image", "")
+    if img_path:
+        patch_id = Path(img_path).stem
+        if patch_id and patch_id != "":
+            needed.add(patch_id)
+
+# Also check bigearthnet_instructions.json if it exists
+inst_path = Path("datasets/bigearthnet/processed/bigearthnet_instructions.json")
+if inst_path.exists():
+    with open(inst_path) as f:
+        inst_data = json.load(f)
+    for item in inst_data:
+        pid = item.get("metadata", {}).get("patch_id", "")
+        if pid:
+            needed.add(pid)
+
+# Filter out already downloaded
+existing = set(f.stem for f in rgb_dir.glob("*.png"))
+needed = needed - existing
+
+print(f"  Need {len(needed)} images, already have {len(existing)}")
+
+if len(needed) == 0:
+    print("  All images already downloaded!")
+    exit(0)
+
+print(f"  Streaming {len(needed)} images from HuggingFace CDN...")
+print("  (Progress shown every 100 images)")
+
+HF_TOKEN = "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"
+
+try:
+    ds = hf_datasets.load_dataset(
+        "danielz01/BigEarthNet-S2-v1.0",
+        "s2-rgb",
+        split="train",
+        streaming=True,
+        token=HF_TOKEN,
+    ).cast_column("img", hf_datasets.Image(decode=False))
+
+    saved = 0
+    for item in ds:
+        img_data = item["img"]
+        patch_id = Path(img_data["path"]).stem
+
+        if patch_id in needed:
+            out = rgb_dir / f"{patch_id}.png"
+            with open(out, "wb") as f:
+                f.write(img_data["bytes"])
+            needed.remove(patch_id)
+            saved += 1
+
+            if saved % 100 == 0:
+                print(f"  Saved {saved} images... {len(needed)} remaining")
+
+            if len(needed) == 0:
+                break
+
+    print(f"  ✅ Downloaded {saved} images to datasets/bigearthnet/rgb/")
+    if needed:
+        print(f"  ⚠️  {len(needed)} images not found in dataset (may be in test split)")
+
+except Exception as e:
+    print(f"  ❌ Image download failed: {e}")
+    print("  You can still run --perplexity eval without images")
 EOF
+
+else
+    echo "⏭️  [5/6] Skipping image download (--no-images flag set)"
+    echo "    Run with full eval using: bash scripts/setup_lightning.sh"
+    echo "    Or download images separately: python training/bigearthnet/fast_image_download.py"
 fi
 
 # ─────────────────────────────────────────────
-# STEP 6: Download BigEarthNet images (optional, for generation eval)
+# STEP 6: Write .env and final checks
 # ─────────────────────────────────────────────
 echo ""
-echo "🛰️  [6/7] Image data setup..."
-echo ""
-echo "  For --perplexity eval: ❌ NO IMAGES NEEDED → skip this step"
-echo "  For --compare eval:    ✅ Images needed"
-echo ""
-echo "  If you need images, run:"
-echo "    python training/bigearthnet/fast_image_download.py --subset val"
-echo "  (takes ~20 min for the val subset)"
+echo "🔧 [6/6] Configuring environment..."
 
-# ─────────────────────────────────────────────
-# STEP 7: Set environment variables
-# ─────────────────────────────────────────────
-echo ""
-echo "🔧 [7/7] Configuring environment..."
-export HF_TOKEN="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"
-export HF_HUB_REPO="Sh1vam26/satquery-rs-vlm"
-export GEOCHAT_BASE_MODEL="MBZUAI/geochat-7B"
-export LORA_ADAPTER_PATH="models/checkpoints/satquery-rs-vlm/checkpoint-1250"
-export VISION_TOWER="openai/clip-vit-large-patch14-336"
-export SATQUERY_MODE="quantized-4bit"
-export DEVICE_MAP="auto"
-echo "✅ Environment configured"
+# Write .env for the project
+cat > .env <<ENVEOF
+# ============================================================
+# SatQuery Environment Configuration (auto-generated)
+# ============================================================
 
-# ─────────────────────────────────────────────
-# DONE — print next steps
-# ─────────────────────────────────────────────
+# ----- HuggingFace -----
+HF_TOKEN=$HF_TOKEN
+HF_HUB_REPO=$HF_CHECKPOINT_REPO
+
+# ----- Model Paths -----
+GEOCHAT_BASE_MODEL=MBZUAI/geochat-7B
+LORA_ADAPTER_PATH=models/checkpoints/satquery-rs-vlm/checkpoint-1250
+VISION_TOWER=openai/clip-vit-large-patch14-336
+
+# ----- Inference Mode -----
+SATQUERY_MODE=quantized-4bit
+
+# ----- Device -----
+DEVICE_MAP=auto
+
+# ----- Paths -----
+DATASET_ROOT=datasets
+CHECKPOINT_DIR=models/checkpoints
+ENVEOF
+
+echo "✅ .env written"
+
+# ── Final Summary ────────────────────────────────────────────
+IMAGE_COUNT=$(ls datasets/bigearthnet/rgb/*.png 2>/dev/null | wc -l || echo 0)
+
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║                    ✅ SETUP COMPLETE!                       ║"
+echo "║                  ✅ SETUP COMPLETE!                         ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
+echo "  📁 Checkpoint:      models/checkpoints/satquery-rs-vlm/checkpoint-1250"
+echo "  📊 Eval data:       datasets/bigearthnet/processed/val_small.json"
+echo "  🛰️  Images on disk:  $IMAGE_COUNT images"
+echo ""
+echo "  ─────────────────────────────────────────────────────────"
 echo "  🔬 Run perplexity eval (NO images needed, ~10 min):"
 echo "     python -m training.finetuning.evaluate --perplexity --max-samples 100"
 echo ""
-echo "  🔬 Run full comparison (needs images, ~30 min):"
+echo "  🔬 Run FULL comparison — base vs adapted (needs images):"
 echo "     python -m training.finetuning.evaluate --compare --max-samples 50"
+echo ""
+echo "  🔬 Run adapted model only:"
+echo "     python -m training.finetuning.evaluate --adapted-only --max-samples 100"
 echo ""
 echo "  🚀 Resume training from checkpoint-1250:"
 echo "     python -m training.finetuning.train --config training/finetuning/config.yaml --resume-from-hub"
 echo ""
-echo "  🌐 Launch API server (port 8080):"
-echo "     SATQUERY_MODE=quantized-4bit python -m backend.serve --host 0.0.0.0 --port 8080"
+echo "  🌐 Launch API server:"
+echo "     python -m backend.serve --host 0.0.0.0 --port 8080"
+echo "  ─────────────────────────────────────────────────────────"
 echo ""
