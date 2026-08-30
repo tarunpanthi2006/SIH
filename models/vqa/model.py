@@ -25,6 +25,13 @@ from typing import Any
 
 import torch
 
+# Monkey patch transformers to allow custom kwargs like 'images' in generate
+try:
+    from transformers.generation.utils import GenerationMixin
+    GenerationMixin._validate_model_kwargs = lambda self, model_kwargs: None
+except ImportError:
+    pass
+
 logger = logging.getLogger(__name__)
 
 # ============================================================
@@ -215,14 +222,17 @@ class SatQueryVLM:
     def _log_memory_usage(self) -> None:
         """Log current GPU memory usage."""
         if torch.cuda.is_available():
-            allocated = torch.cuda.memory_allocated() / 1024**3
-            reserved = torch.cuda.memory_reserved() / 1024**3
-            total = torch.cuda.get_device_properties(0).total_mem / 1024**3
-            logger.info(
-                f"GPU Memory: {allocated:.1f}GB allocated, "
-                f"{reserved:.1f}GB reserved, "
-                f"{total:.1f}GB total"
-            )
+            try:
+                allocated = torch.cuda.memory_allocated() / 1024**3
+                reserved = torch.cuda.memory_reserved() / 1024**3
+                total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                logger.info(
+                    f"GPU Memory: {allocated:.1f}GB allocated, "
+                    f"{reserved:.1f}GB reserved, "
+                    f"{total:.1f}GB total"
+                )
+            except Exception:
+                pass
 
     def generate(
         self,
