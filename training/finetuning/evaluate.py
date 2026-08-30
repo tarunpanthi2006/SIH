@@ -388,7 +388,7 @@ def evaluate_model(
                     vqa_preds.append(pred)
                     vqa_refs.append(reference)
                 except Exception as e:
-                    logger.debug(f"VQA failed: {e}")
+                    logger.error(f"VQA failed: {e}", exc_info=True)
 
             if (i + 1) % 25 == 0:
                 elapsed = time.time() - start_time
@@ -425,7 +425,7 @@ def evaluate_model(
                     cap_preds.append(pred)
                     cap_refs.append(reference)
                 except Exception as e:
-                    logger.debug(f"Caption failed: {e}")
+                    logger.error(f"Caption failed: {e}", exc_info=True)
 
             if (i + 1) % 25 == 0:
                 elapsed = time.time() - start_time
