@@ -234,50 +234,30 @@ else:
         print(f"  ❌ Download failed: {e}")
         import traceback; traceback.print_exc()
         exit(1)
-
-# Step 2: Extract the tar.gz
-print(f"\n  Extracting {TAR_FILE}...")
-print(f"  Extracting to: datasets/bigearthnet/rgb/")
-
-import tarfile, shutil
-
-extract_dir = Path("datasets/bigearthnet/_extracted_tmp")
-rgb_dir     = Path("datasets/bigearthnet/rgb")
-extract_dir.mkdir(parents=True, exist_ok=True)
-
-try:
-    with tarfile.open(str(TAR_DEST), "r:gz") as tar:
-        members = tar.getmembers()
-        print(f"  Total files in archive: {len(members)}")
-
-        # Extract all
-        tar.extractall(path=str(extract_dir))
-    print(f"  Extraction complete!")
-
-    # Find all image files in the extracted folder and move to rgb/
-    img_exts = {".png", ".jpg", ".jpeg", ".tif", ".tiff"}
-    all_imgs = [f for f in extract_dir.rglob("*") if f.suffix.lower() in img_exts]
-    print(f"  Found {len(all_imgs)} image files — moving to datasets/bigearthnet/rgb/")
-
-    moved = 0
-    for img in all_imgs:
-        dest = rgb_dir / img.name
-        if not dest.exists():
-            shutil.copy2(img, dest)
-            moved += 1
-        if moved % 5000 == 0 and moved > 0:
-            print(f"  Moved {moved}/{len(all_imgs)} images...")
-
-    # Cleanup tmp dir
-    shutil.rmtree(extract_dir, ignore_errors=True)
-
-    final = len(list(rgb_dir.glob("*.png"))) + len(list(rgb_dir.glob("*.jpg")))
-    print(f"\n  ✅ Done! {final} images now in datasets/bigearthnet/rgb/")
-
-except Exception as e:
-    print(f"  ❌ Extraction failed: {e}")
-    import traceback; traceback.print_exc()
 EOF
+
+    # Step 2: Extract the tar.gz using bash (much faster and no memory limits)
+    echo ""
+    echo "  Extracting bigearthnet_extracted.tar.gz..."
+    mkdir -p datasets/bigearthnet/_extracted_tmp
+    
+    # Extract using tar directly
+    tar -xzf datasets/bigearthnet/bigearthnet_extracted.tar.gz -C datasets/bigearthnet/_extracted_tmp/
+    echo "  Extraction complete!"
+
+    # Step 3: Move files to the correct locations
+    echo "  Moving images to datasets/bigearthnet/rgb/..."
+    
+    # The tar might contain datasets/bigearthnet/rgb/ or just rgb/ or just files.
+    # We use find to efficiently locate all image files and move them.
+    find datasets/bigearthnet/_extracted_tmp/ -type f \( -iname \*.png -o -iname \*.jpg -o -iname \*.tif -o -iname \*.tiff \) -exec mv -n {} datasets/bigearthnet/rgb/ \;
+    
+    # Cleanup tmp dir
+    rm -rf datasets/bigearthnet/_extracted_tmp/
+
+    FINAL_COUNT=$(ls datasets/bigearthnet/rgb/*.png 2>/dev/null | wc -l || echo 0)
+    echo "  ✅ Done! $FINAL_COUNT images now in datasets/bigearthnet/rgb/"
+    
     fi
 
 else
