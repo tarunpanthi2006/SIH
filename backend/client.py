@@ -42,9 +42,12 @@ class SatQueryClient:
 
     def health(self) -> dict:
         """Check if the server is healthy and model is loaded."""
-        resp = requests.get(f"{self.base_url}/health", timeout=10)
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            resp = requests.get(f"{self.base_url}/health", timeout=10)
+            resp.raise_for_status()
+            return resp.json()
+        except requests.exceptions.RequestException as e:
+            return {"status": "unreachable", "error": str(e)}
 
     def vqa(self, image_path: str, question: str) -> dict:
         """
@@ -57,19 +60,22 @@ class SatQueryClient:
         Returns:
             ToolResult dict with answer, confidence, etc.
         """
-        with open(image_path, "rb") as f:
-            files = {"image": (Path(image_path).name, f, "image/png")}
-            data = {"question": question}
+        try:
+            with open(image_path, "rb") as f:
+                files = {"image": (Path(image_path).name, f, "image/png")}
+                data = {"question": question}
 
-            resp = requests.post(
-                f"{self.base_url}/vqa",
-                files=files,
-                data=data,
-                timeout=self.timeout,
-            )
+                resp = requests.post(
+                    f"{self.base_url}/vqa",
+                    files=files,
+                    data=data,
+                    timeout=self.timeout,
+                )
 
-        resp.raise_for_status()
-        return resp.json()
+            resp.raise_for_status()
+            return resp.json()
+        except requests.exceptions.RequestException as e:
+            return _format_error("vqa", str(e))
 
     def caption(self, image_path: str, instruction: str | None = None) -> dict:
         """
@@ -82,21 +88,24 @@ class SatQueryClient:
         Returns:
             ToolResult dict with caption, confidence, etc.
         """
-        with open(image_path, "rb") as f:
-            files = {"image": (Path(image_path).name, f, "image/png")}
-            data = {}
-            if instruction:
-                data["instruction"] = instruction
+        try:
+            with open(image_path, "rb") as f:
+                files = {"image": (Path(image_path).name, f, "image/png")}
+                data = {}
+                if instruction:
+                    data["instruction"] = instruction
 
-            resp = requests.post(
-                f"{self.base_url}/caption",
-                files=files,
-                data=data,
-                timeout=self.timeout,
-            )
+                resp = requests.post(
+                    f"{self.base_url}/caption",
+                    files=files,
+                    data=data,
+                    timeout=self.timeout,
+                )
 
-        resp.raise_for_status()
-        return resp.json()
+            resp.raise_for_status()
+            return resp.json()
+        except requests.exceptions.RequestException as e:
+            return _format_error("caption", str(e))
 
     def grounding(self, image_path: str, query: str) -> dict:
         """
@@ -109,19 +118,22 @@ class SatQueryClient:
         Returns:
             ToolResult dict with spatial_evidence, confidence, etc.
         """
-        with open(image_path, "rb") as f:
-            files = {"image": (Path(image_path).name, f, "image/png")}
-            data = {"query": query}
+        try:
+            with open(image_path, "rb") as f:
+                files = {"image": (Path(image_path).name, f, "image/png")}
+                data = {"query": query}
 
-            resp = requests.post(
-                f"{self.base_url}/grounding",
-                files=files,
-                data=data,
-                timeout=self.timeout,
-            )
+                resp = requests.post(
+                    f"{self.base_url}/grounding",
+                    files=files,
+                    data=data,
+                    timeout=self.timeout,
+                )
 
-        resp.raise_for_status()
-        return resp.json()
+            resp.raise_for_status()
+            return resp.json()
+        except requests.exceptions.RequestException as e:
+            return _format_error("grounding", str(e))
 
     def change_vqa(
         self,
@@ -142,29 +154,46 @@ class SatQueryClient:
         Returns:
             ToolResult dict with change interpretation
         """
-        files = {}
-        with open(image_before, "rb") as fa, open(image_after, "rb") as fb:
-            files["image_before"] = (Path(image_before).name, fa, "image/png")
-            files["image_after"] = (Path(image_after).name, fb, "image/png")
+        try:
+            files = {}
+            with open(image_before, "rb") as fa, open(image_after, "rb") as fb:
+                files["image_before"] = (Path(image_before).name, fa, "image/png")
+                files["image_after"] = (Path(image_after).name, fb, "image/png")
 
-            if change_mask:
-                fm = open(change_mask, "rb")
-                files["change_mask"] = (Path(change_mask).name, fm, "image/png")
+                if change_mask:
+                    fm = open(change_mask, "rb")
+                    files["change_mask"] = (Path(change_mask).name, fm, "image/png")
 
-            data = {"question": question}
+                data = {"question": question}
 
-            resp = requests.post(
-                f"{self.base_url}/change-vqa",
-                files=files,
-                data=data,
-                timeout=self.timeout,
-            )
+                resp = requests.post(
+                    f"{self.base_url}/change-vqa",
+                    files=files,
+                    data=data,
+                    timeout=self.timeout,
+                )
 
-            if change_mask:
-                fm.close()
+                if change_mask:
+                    fm.close()
 
-        resp.raise_for_status()
-        return resp.json()
+            resp.raise_for_status()
+            return resp.json()
+        except requests.exceptions.RequestException as e:
+            return _format_error("change_vqa", str(e))
+
+
+def _format_error(task: str, error_msg: str) -> dict:
+    """Helper to return a standardized ToolResult error dict."""
+    return {
+        "task": task,
+        "model": "SatQueryClient",
+        "answer": "",
+        "confidence": 0.0,
+        "spatial_evidence": [],
+        "artifacts": [],
+        "metadata": {"error": True},
+        "warnings": [f"API Connection Error: {error_msg}"]
+    }
 
 
 # ============================================================
