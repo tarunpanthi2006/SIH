@@ -382,6 +382,7 @@ def evaluate_model(
             question = sample["conversations"][0]["value"].replace("<image>\n", "")
             reference = sample["conversations"][1]["value"]
 
+            logger.info(f"    Checking image path: {image_path} (Exists: {os.path.exists(image_path)})")
             if os.path.exists(image_path):
                 try:
                     pred, _ = vqa_inference(image_path, question)
@@ -419,6 +420,7 @@ def evaluate_model(
             image_path = sample.get("image", "")
             reference = sample["conversations"][1]["value"]
 
+            logger.info(f"    Checking image path: {image_path} (Exists: {os.path.exists(image_path)})")
             if os.path.exists(image_path):
                 try:
                     pred, _ = caption_inference(image_path)
