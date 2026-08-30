@@ -39,7 +39,7 @@ training:
   per_device_train_batch_size: 4
   per_device_eval_batch_size: 4
   gradient_accumulation_steps: 8    # Effective batch = 4 * 8 = 32
-  learning_rate: 5.0e-5
+  learning_rate: 1.53e-4
   warmup_ratio: 0.0
   weight_decay: 0.0
   max_grad_norm: 1.0
