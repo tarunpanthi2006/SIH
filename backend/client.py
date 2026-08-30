@@ -18,14 +18,51 @@ Usage:
 """
 
 from __future__ import annotations
-
+import io
+import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
 import requests
+from PIL import Image
 
 logger = logging.getLogger(__name__)
+
+
+def _optimize_image(image_path: str, max_size: int = 1024) -> tuple[str, io.BytesIO, str]:
+    """
+    Compresses and resizes an image in-memory before sending over the network.
+    This prevents massive network latency if the Agent tries to send a 4K image.
+    
+    Returns:
+        tuple of (filename, BytesIO stream, mime_type)
+    """
+    try:
+        img = Image.open(image_path)
+        
+        # Resize if larger than max_size while maintaining aspect ratio
+        if img.width > max_size or img.height > max_size:
+            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+            
+        # Convert to RGB to discard alpha channel bloat if present
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+            
+        # Save to memory buffer as high-quality JPEG
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=85)
+        buffer.seek(0)
+        
+        filename = Path(image_path).with_suffix(".jpg").name
+        return filename, buffer, "image/jpeg"
+        
+    except Exception as e:
+        logger.warning(f"Image optimization failed for {image_path}: {e}. Falling back to raw file.")
+        # Fallback to reading raw file if PIL fails
+        f = open(image_path, "rb")
+        return Path(image_path).name, f, "image/png"
 
 
 class SatQueryClient:
@@ -61,8 +98,10 @@ class SatQueryClient:
             ToolResult dict with answer, confidence, etc.
         """
         try:
-            with open(image_path, "rb") as f:
-                files = {"image": (Path(image_path).name, f, "image/png")}
+            filename, file_stream, mime = _optimize_image(image_path)
+            
+            try:
+                files = {"image": (filename, file_stream, mime)}
                 data = {"question": question}
 
                 resp = requests.post(
@@ -71,6 +110,8 @@ class SatQueryClient:
                     data=data,
                     timeout=self.timeout,
                 )
+            finally:
+                file_stream.close()
 
             resp.raise_for_status()
             return resp.json()
@@ -89,8 +130,10 @@ class SatQueryClient:
             ToolResult dict with caption, confidence, etc.
         """
         try:
-            with open(image_path, "rb") as f:
-                files = {"image": (Path(image_path).name, f, "image/png")}
+            filename, file_stream, mime = _optimize_image(image_path)
+            
+            try:
+                files = {"image": (filename, file_stream, mime)}
                 data = {}
                 if instruction:
                     data["instruction"] = instruction
@@ -101,6 +144,8 @@ class SatQueryClient:
                     data=data,
                     timeout=self.timeout,
                 )
+            finally:
+                file_stream.close()
 
             resp.raise_for_status()
             return resp.json()
@@ -119,8 +164,10 @@ class SatQueryClient:
             ToolResult dict with spatial_evidence, confidence, etc.
         """
         try:
-            with open(image_path, "rb") as f:
-                files = {"image": (Path(image_path).name, f, "image/png")}
+            filename, file_stream, mime = _optimize_image(image_path)
+            
+            try:
+                files = {"image": (filename, file_stream, mime)}
                 data = {"query": query}
 
                 resp = requests.post(
@@ -129,6 +176,8 @@ class SatQueryClient:
                     data=data,
                     timeout=self.timeout,
                 )
+            finally:
+                file_stream.close()
 
             resp.raise_for_status()
             return resp.json()
@@ -155,12 +204,18 @@ class SatQueryClient:
             ToolResult dict with change interpretation
         """
         try:
-            files = {}
-            with open(image_before, "rb") as fa, open(image_after, "rb") as fb:
-                files["image_before"] = (Path(image_before).name, fa, "image/png")
-                files["image_after"] = (Path(image_after).name, fb, "image/png")
+            name_a, stream_a, mime_a = _optimize_image(image_before)
+            name_b, stream_b, mime_b = _optimize_image(image_after)
+            
+            try:
+                files = {
+                    "image_before": (name_a, stream_a, mime_a),
+                    "image_after": (name_b, stream_b, mime_b)
+                }
 
                 if change_mask:
+                    # Do NOT optimize the change_mask. It is a binary segmentation mask.
+                    # JPEG compression or resizing would destroy the exact pixel boundaries.
                     fm = open(change_mask, "rb")
                     files["change_mask"] = (Path(change_mask).name, fm, "image/png")
 
@@ -175,6 +230,9 @@ class SatQueryClient:
 
                 if change_mask:
                     fm.close()
+            finally:
+                stream_a.close()
+                stream_b.close()
 
             resp.raise_for_status()
             return resp.json()
