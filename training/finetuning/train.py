@@ -322,7 +322,7 @@ def train(config_path: str, debug: bool = False, small: bool = False, resume_fro
         # Hub push for checkpoint survival
         push_to_hub=push_to_hub,
         hub_model_id=hub_model_id if push_to_hub else None,
-        hub_strategy=train_config.get("hub_strategy", "every_save") if push_to_hub else None,
+        hub_strategy=train_config.get("hub_strategy", "every_save"),
         hub_private_repo=train_config.get("hub_private_repo", True),
         hub_token=hub_token,
         # Resume
