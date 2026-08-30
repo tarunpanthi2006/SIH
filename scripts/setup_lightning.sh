@@ -106,78 +106,76 @@ echo "📊 [4/6] Preparing evaluation data..."
 mkdir -p datasets/bigearthnet/processed
 
 if [ ! -f "datasets/bigearthnet/processed/val_small.json" ]; then
-    echo "  val_small.json not found — downloading from HuggingFace..."
+    echo "  val_small.json not found — generating from BigEarthNet.txt parquet..."
     python - <<'EOF'
 import json
 from pathlib import Path
-from huggingface_hub import hf_hub_download
 
 token = "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"
 
-try:
-    # Try downloading from your checkpoint repo (we push data there too)
-    path = hf_hub_download(
-        repo_id="Sh1vam26/satquery-rs-vlm",
-        filename="val_small.json",
-        repo_type="model",
-        local_dir="datasets/bigearthnet/processed",
-        token=token,
-    )
-    print(f"  Downloaded val_small.json from Hub: {path}")
-except Exception as e:
-    print(f"  Not found on Hub ({e})")
-    # Generate from BigEarthNet.txt parquet if available
-    parquet_path = Path("datasets/bigearthnet/raw/BigEarthNet.txt.parquet")
-    if parquet_path.exists():
-        import pandas as pd
-        import random
-        df = pd.read_parquet(parquet_path)
-        val_df = df[df["split"] == "val"].head(500)
-        samples = []
-        for _, row in val_df.iterrows():
-            samples.append({
-                "id": row.get("patch_id", f"sample_{len(samples)}"),
-                "image": f"datasets/bigearthnet/rgb/{row.get('patch_id','')}.png",
-                "conversations": [
-                    {"from": "human", "value": f"<image>\n{row.get('input', 'Describe this satellite image.')}"},
-                    {"from": "gpt",   "value": row.get("output", "")}
-                ],
-                "metadata": {"task_type": row.get("type", "captioning"), "patch_id": row.get("patch_id", "")}
-            })
-        with open("datasets/bigearthnet/processed/val_small.json", "w") as f:
-            json.dump(samples, f, indent=2)
-        print(f"  Generated val_small.json from parquet ({len(samples)} samples)")
-    else:
-        # Download the parquet first then generate
-        from huggingface_hub import hf_hub_download as hf_dl
-        try:
-            parquet = hf_dl(
-                repo_id="BIFOLD-BigEarthNetv2-0/BigEarthNet.txt",
-                filename="BigEarthNet.txt.parquet",
-                repo_type="dataset",
-                local_dir="datasets/bigearthnet/raw",
-                token=token,
-            )
-            import pandas as pd, random
-            df = pd.read_parquet(parquet)
-            val_df = df[df["split"] == "val"].head(500)
-            samples = []
-            for _, row in val_df.iterrows():
-                samples.append({
-                    "id": row.get("patch_id", f"sample_{len(samples)}"),
-                    "image": f"datasets/bigearthnet/rgb/{row.get('patch_id','')}.png",
-                    "conversations": [
-                        {"from": "human", "value": f"<image>\n{row.get('input', 'Describe this satellite image.')}"},
-                        {"from": "gpt",   "value": row.get("output", "")}
-                    ],
-                    "metadata": {"task_type": row.get("type", "captioning"), "patch_id": row.get("patch_id", "")}
-                })
-            with open("datasets/bigearthnet/processed/val_small.json", "w") as f:
-                json.dump(samples, f, indent=2)
-            print(f"  Generated val_small.json from BigEarthNet.txt parquet ({len(samples)} samples)")
-        except Exception as e2:
-            print(f"  Warning: Could not generate val data: {e2}")
-            print("  Will use text-only perplexity eval")
+# Step A: Download BigEarthNet.txt parquet from HuggingFace Datasets
+parquet_path = Path("datasets/bigearthnet/raw/BigEarthNet.txt.parquet")
+if not parquet_path.exists():
+    print("  Downloading BigEarthNet.txt parquet from HuggingFace...")
+    parquet_path.parent.mkdir(parents=True, exist_ok=True)
+    from huggingface_hub import hf_hub_download
+    try:
+        dl = hf_hub_download(
+            repo_id="BIFOLD-BigEarthNetv2-0/BigEarthNet.txt",
+            filename="BigEarthNet.txt.parquet",
+            repo_type="dataset",
+            local_dir=str(parquet_path.parent),
+            token=token,
+        )
+        parquet_path = Path(dl)
+        print(f"  Parquet downloaded: {parquet_path}")
+    except Exception as e:
+        print(f"  ❌ Parquet download failed: {e}")
+        exit(1)
+else:
+    print(f"  Parquet already exists: {parquet_path}")
+
+# Step B: Generate val_small.json from parquet val split
+import pandas as pd
+print("  Reading parquet and extracting val split...")
+df = pd.read_parquet(parquet_path)
+print(f"  Total rows: {len(df):,}, columns: {list(df.columns)}")
+
+# Handle different column naming conventions
+split_col  = next((c for c in df.columns if "split" in c.lower()), None)
+input_col  = next((c for c in df.columns if c.lower() in ("input", "question", "instruction")), None)
+output_col = next((c for c in df.columns if c.lower() in ("output", "answer", "response")), None)
+patch_col  = next((c for c in df.columns if "patch" in c.lower()), None)
+type_col   = next((c for c in df.columns if c.lower() in ("type", "task_type", "category")), None)
+
+if split_col:
+    val_df = df[df[split_col] == "val"].head(500)
+else:
+    val_df = df.head(500)
+
+print(f"  Val samples: {len(val_df)}")
+
+samples = []
+for _, row in val_df.iterrows():
+    patch_id = str(row.get(patch_col, f"sample_{len(samples)}")) if patch_col else f"sample_{len(samples)}"
+    inp  = str(row.get(input_col,  "Describe this satellite image.")) if input_col  else "Describe this satellite image."
+    out  = str(row.get(output_col, "")) if output_col else ""
+    typ  = str(row.get(type_col,   "captioning")) if type_col else "captioning"
+    samples.append({
+        "id": patch_id,
+        "image": f"datasets/bigearthnet/rgb/{patch_id}.png",
+        "conversations": [
+            {"from": "human", "value": f"<image>\n{inp}"},
+            {"from": "gpt",   "value": out},
+        ],
+        "metadata": {"task_type": typ, "patch_id": patch_id}
+    })
+
+out_path = Path("datasets/bigearthnet/processed/val_small.json")
+out_path.parent.mkdir(parents=True, exist_ok=True)
+with open(out_path, "w") as f:
+    json.dump(samples, f, indent=2)
+print(f"  ✅ val_small.json created with {len(samples)} samples → {out_path}")
 EOF
 else
     COUNT=$(python -c "import json; d=json.load(open('datasets/bigearthnet/processed/val_small.json')); print(len(d))")
