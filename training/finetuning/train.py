@@ -357,8 +357,10 @@ def train(config_path: str, debug: bool = False, small: bool = False, resume_fro
     # Check for existing checkpoint to resume
     checkpoint = None
     if training_args.resume_from_checkpoint:
-        checkpoints = sorted(Path(output_dir).glob("checkpoint-*"))
+        checkpoints = list(Path(output_dir).glob("checkpoint-*"))
         if checkpoints:
+            # Sort numerically by the step number (e.g., checkpoint-1250 -> 1250)
+            checkpoints.sort(key=lambda x: int(x.name.split("-")[-1]))
             checkpoint = str(checkpoints[-1])
             logger.info(f"Resuming from checkpoint: {checkpoint}")
 
