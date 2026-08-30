@@ -252,8 +252,8 @@ EOF
     # We use find to efficiently locate all image files and move them.
     find datasets/bigearthnet/_extracted_tmp/ -type f \( -iname \*.png -o -iname \*.jpg -o -iname \*.tif -o -iname \*.tiff \) -exec mv -n {} datasets/bigearthnet/rgb/ \;
     
-    # Cleanup tmp dir
-    rm -rf datasets/bigearthnet/_extracted_tmp/
+    # Cleanup tmp dir (commented out temporarily for debugging)
+    # rm -rf datasets/bigearthnet/_extracted_tmp/
 
     FINAL_COUNT=$(ls datasets/bigearthnet/rgb/*.png 2>/dev/null | wc -l || echo 0)
     echo "  ✅ Done! $FINAL_COUNT images now in datasets/bigearthnet/rgb/"
