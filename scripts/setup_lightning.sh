@@ -185,101 +185,104 @@ fi
 echo "✅ Evaluation data ready"
 
 # ─────────────────────────────────────────────
-# STEP 5: Get BigEarthNet images from YOUR HF repo
+# STEP 5: Download & extract BigEarthNet images from YOUR HF repo
 # ─────────────────────────────────────────────
 echo ""
 if [ "$DOWNLOAD_IMAGES" = true ]; then
-    echo "🛰️  [5/6] Downloading BigEarthNet images from your HF repo..."
-    echo "    Repo: $HF_CHECKPOINT_REPO"
+    echo "🛰️  [5/6] Downloading BigEarthNet images (bigearthnet_extracted.tar.gz)..."
+    echo "    Source: Sh1vam26/satquery-rs-vlm (10.2 GB)"
+    echo "    This will take 10-20 minutes depending on your connection speed"
     echo ""
 
-    python - <<'EOF'
-import os, shutil
+    mkdir -p datasets/bigearthnet/rgb
+
+    # Check if already extracted
+    IMG_COUNT=$(ls datasets/bigearthnet/rgb/*.png 2>/dev/null | wc -l || echo 0)
+    if [ "$IMG_COUNT" -gt "100" ]; then
+        echo "  ✅ Images already extracted ($IMG_COUNT images found) — skipping download"
+    else
+        python - <<'EOF'
+import os
 from pathlib import Path
-from huggingface_hub import snapshot_download
+from huggingface_hub import hf_hub_download
 
 HF_TOKEN = "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"
 HF_REPO  = "Sh1vam26/satquery-rs-vlm"
-RGB_DEST = Path("datasets/bigearthnet/rgb")
-RGB_DEST.mkdir(parents=True, exist_ok=True)
+TAR_FILE = "bigearthnet_extracted.tar.gz"
+TAR_DEST = Path("datasets/bigearthnet") / TAR_FILE
 
-# First check: did step 3 (snapshot_download) already put images somewhere?
-checkpoint_dir = Path("models/checkpoints/satquery-rs-vlm")
-possible_src_dirs = [
-    checkpoint_dir / "rgb",
-    checkpoint_dir / "datasets" / "bigearthnet" / "rgb",
-    checkpoint_dir / "images",
-    checkpoint_dir / "bigearthnet" / "rgb",
-    Path("datasets/bigearthnet/images"),
-]
-
-moved = 0
-for src_dir in possible_src_dirs:
-    if src_dir.exists():
-        pngs = list(src_dir.glob("*.png")) + list(src_dir.glob("*.jpg")) + list(src_dir.glob("*.tif"))
-        if pngs:
-            print(f"  Found {len(pngs)} images in {src_dir} — moving to datasets/bigearthnet/rgb/")
-            for img in pngs:
-                dest = RGB_DEST / img.name
-                if not dest.exists():
-                    shutil.copy2(img, dest)
-                    moved += 1
-            if moved > 0:
-                print(f"  ✅ Moved {moved} images")
-                break
-
-if moved > 0:
-    print(f"  Total images in rgb/: {len(list(RGB_DEST.glob('*.png')))}")
+# Step 1: Download the tar.gz if not already present
+if TAR_DEST.exists() and TAR_DEST.stat().st_size > 1_000_000:
+    print(f"  ✅ {TAR_FILE} already downloaded ({TAR_DEST.stat().st_size / 1e9:.1f} GB)")
 else:
-    # Images not already downloaded — do a targeted download from HF repo
-    print(f"  Images not found locally — downloading from {HF_REPO}...")
-    print(f"  (This may take 10-30 minutes depending on how many images are stored)")
+    print(f"  Downloading {TAR_FILE} from {HF_REPO}...")
+    print(f"  File size: ~10.2 GB — please be patient!")
+    TAR_DEST.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Download only the rgb/ or datasets/ subfolder from the repo
-        dl_dir = snapshot_download(
+        downloaded = hf_hub_download(
             repo_id=HF_REPO,
+            filename=TAR_FILE,
             repo_type="model",
             token=HF_TOKEN,
-            local_dir="models/checkpoints/satquery-rs-vlm",
-            # Download everything — images should be in there
-            ignore_patterns=["*.bin", "*.safetensors", "*.pt", "optimizer*"],
+            local_dir=str(TAR_DEST.parent),
+            local_dir_use_symlinks=False,
         )
-        print(f"  Downloaded to: {dl_dir}")
-
-        # Now search for images in the downloaded folder
-        dl_path = Path(dl_dir)
-        all_imgs = (list(dl_path.rglob("*.png")) +
-                    list(dl_path.rglob("*.jpg")) +
-                    list(dl_path.rglob("*.tif")))
-
-        # Filter out any that aren't satellite images (rough heuristic: >10KB)
-        sat_imgs = [f for f in all_imgs if f.stat().st_size > 10_000]
-
-        print(f"  Found {len(sat_imgs)} image files in downloaded repo")
-
-        for img in sat_imgs:
-            dest = RGB_DEST / img.name
-            if not dest.exists():
-                shutil.copy2(img, dest)
-
-        final_count = len(list(RGB_DEST.glob("*.png")))
-        print(f"  ✅ {final_count} images now in datasets/bigearthnet/rgb/")
-
-        if final_count == 0:
-            print("  ⚠️  No images found in your HF repo.")
-            print("  Your HF repo may only contain model weights, not images.")
-            print("  For --perplexity eval, images are NOT needed. Just run:")
-            print("    python -m training.finetuning.evaluate --perplexity --max-samples 100")
-
+        print(f"  ✅ Downloaded to: {downloaded}")
+        TAR_DEST = Path(downloaded)
     except Exception as e:
         print(f"  ❌ Download failed: {e}")
         import traceback; traceback.print_exc()
+        exit(1)
+
+# Step 2: Extract the tar.gz
+print(f"\n  Extracting {TAR_FILE}...")
+print(f"  Extracting to: datasets/bigearthnet/rgb/")
+
+import tarfile, shutil
+
+extract_dir = Path("datasets/bigearthnet/_extracted_tmp")
+rgb_dir     = Path("datasets/bigearthnet/rgb")
+extract_dir.mkdir(parents=True, exist_ok=True)
+
+try:
+    with tarfile.open(str(TAR_DEST), "r:gz") as tar:
+        members = tar.getmembers()
+        print(f"  Total files in archive: {len(members)}")
+
+        # Extract all
+        tar.extractall(path=str(extract_dir))
+    print(f"  Extraction complete!")
+
+    # Find all image files in the extracted folder and move to rgb/
+    img_exts = {".png", ".jpg", ".jpeg", ".tif", ".tiff"}
+    all_imgs = [f for f in extract_dir.rglob("*") if f.suffix.lower() in img_exts]
+    print(f"  Found {len(all_imgs)} image files — moving to datasets/bigearthnet/rgb/")
+
+    moved = 0
+    for img in all_imgs:
+        dest = rgb_dir / img.name
+        if not dest.exists():
+            shutil.copy2(img, dest)
+            moved += 1
+        if moved % 5000 == 0 and moved > 0:
+            print(f"  Moved {moved}/{len(all_imgs)} images...")
+
+    # Cleanup tmp dir
+    shutil.rmtree(extract_dir, ignore_errors=True)
+
+    final = len(list(rgb_dir.glob("*.png"))) + len(list(rgb_dir.glob("*.jpg")))
+    print(f"\n  ✅ Done! {final} images now in datasets/bigearthnet/rgb/")
+
+except Exception as e:
+    print(f"  ❌ Extraction failed: {e}")
+    import traceback; traceback.print_exc()
 EOF
+    fi
 
 else
     echo "⏭️  [5/6] Skipping image download (--no-images flag set)"
-    echo "    For perplexity eval (no images needed):"
+    echo "    Run perplexity eval without images:"
     echo "      python -m training.finetuning.evaluate --perplexity --max-samples 100"
 fi
 
