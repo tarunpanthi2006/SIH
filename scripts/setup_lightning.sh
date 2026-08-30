@@ -185,115 +185,102 @@ fi
 echo "✅ Evaluation data ready"
 
 # ─────────────────────────────────────────────
-# STEP 5: Download BigEarthNet images (for full eval)
+# STEP 5: Get BigEarthNet images from YOUR HF repo
 # ─────────────────────────────────────────────
 echo ""
 if [ "$DOWNLOAD_IMAGES" = true ]; then
-    echo "🛰️  [5/6] Downloading BigEarthNet satellite images..."
-    echo "    Source: HuggingFace ($HF_IMAGES_REPO)"
-    echo "    This streams only the images referenced in val_small.json"
-    echo "    Estimated time: 15-30 minutes depending on GPU machine speed"
+    echo "🛰️  [5/6] Downloading BigEarthNet images from your HF repo..."
+    echo "    Repo: $HF_CHECKPOINT_REPO"
     echo ""
 
-    mkdir -p datasets/bigearthnet/rgb
-
     python - <<'EOF'
-import json, os
+import os, shutil
 from pathlib import Path
-
-try:
-    import datasets as hf_datasets
-except ImportError:
-    import subprocess, sys
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "datasets"])
-    import datasets as hf_datasets
-
-from PIL import Image
-
-rgb_dir = Path("datasets/bigearthnet/rgb")
-val_path = Path("datasets/bigearthnet/processed/val_small.json")
-
-if not val_path.exists():
-    print("  val_small.json not found — skipping image download")
-    exit(0)
-
-with open(val_path) as f:
-    data = json.load(f)
-
-# Get all unique patch IDs we need
-needed = set()
-for item in data:
-    img_path = item.get("image", "")
-    if img_path:
-        patch_id = Path(img_path).stem
-        if patch_id and patch_id != "":
-            needed.add(patch_id)
-
-# Also check bigearthnet_instructions.json if it exists
-inst_path = Path("datasets/bigearthnet/processed/bigearthnet_instructions.json")
-if inst_path.exists():
-    with open(inst_path) as f:
-        inst_data = json.load(f)
-    for item in inst_data:
-        pid = item.get("metadata", {}).get("patch_id", "")
-        if pid:
-            needed.add(pid)
-
-# Filter out already downloaded
-existing = set(f.stem for f in rgb_dir.glob("*.png"))
-needed = needed - existing
-
-print(f"  Need {len(needed)} images, already have {len(existing)}")
-
-if len(needed) == 0:
-    print("  All images already downloaded!")
-    exit(0)
-
-print(f"  Streaming {len(needed)} images from HuggingFace CDN...")
-print("  (Progress shown every 100 images)")
+from huggingface_hub import snapshot_download
 
 HF_TOKEN = "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"
+HF_REPO  = "Sh1vam26/satquery-rs-vlm"
+RGB_DEST = Path("datasets/bigearthnet/rgb")
+RGB_DEST.mkdir(parents=True, exist_ok=True)
 
-try:
-    ds = hf_datasets.load_dataset(
-        "danielz01/BigEarthNet-S2-v1.0",
-        "s2-rgb",
-        split="train",
-        streaming=True,
-        token=HF_TOKEN,
-    ).cast_column("img", hf_datasets.Image(decode=False))
+# First check: did step 3 (snapshot_download) already put images somewhere?
+checkpoint_dir = Path("models/checkpoints/satquery-rs-vlm")
+possible_src_dirs = [
+    checkpoint_dir / "rgb",
+    checkpoint_dir / "datasets" / "bigearthnet" / "rgb",
+    checkpoint_dir / "images",
+    checkpoint_dir / "bigearthnet" / "rgb",
+    Path("datasets/bigearthnet/images"),
+]
 
-    saved = 0
-    for item in ds:
-        img_data = item["img"]
-        patch_id = Path(img_data["path"]).stem
-
-        if patch_id in needed:
-            out = rgb_dir / f"{patch_id}.png"
-            with open(out, "wb") as f:
-                f.write(img_data["bytes"])
-            needed.remove(patch_id)
-            saved += 1
-
-            if saved % 100 == 0:
-                print(f"  Saved {saved} images... {len(needed)} remaining")
-
-            if len(needed) == 0:
+moved = 0
+for src_dir in possible_src_dirs:
+    if src_dir.exists():
+        pngs = list(src_dir.glob("*.png")) + list(src_dir.glob("*.jpg")) + list(src_dir.glob("*.tif"))
+        if pngs:
+            print(f"  Found {len(pngs)} images in {src_dir} — moving to datasets/bigearthnet/rgb/")
+            for img in pngs:
+                dest = RGB_DEST / img.name
+                if not dest.exists():
+                    shutil.copy2(img, dest)
+                    moved += 1
+            if moved > 0:
+                print(f"  ✅ Moved {moved} images")
                 break
 
-    print(f"  ✅ Downloaded {saved} images to datasets/bigearthnet/rgb/")
-    if needed:
-        print(f"  ⚠️  {len(needed)} images not found in dataset (may be in test split)")
+if moved > 0:
+    print(f"  Total images in rgb/: {len(list(RGB_DEST.glob('*.png')))}")
+else:
+    # Images not already downloaded — do a targeted download from HF repo
+    print(f"  Images not found locally — downloading from {HF_REPO}...")
+    print(f"  (This may take 10-30 minutes depending on how many images are stored)")
 
-except Exception as e:
-    print(f"  ❌ Image download failed: {e}")
-    print("  You can still run --perplexity eval without images")
+    try:
+        # Download only the rgb/ or datasets/ subfolder from the repo
+        dl_dir = snapshot_download(
+            repo_id=HF_REPO,
+            repo_type="model",
+            token=HF_TOKEN,
+            local_dir="models/checkpoints/satquery-rs-vlm",
+            # Download everything — images should be in there
+            ignore_patterns=["*.bin", "*.safetensors", "*.pt", "optimizer*"],
+        )
+        print(f"  Downloaded to: {dl_dir}")
+
+        # Now search for images in the downloaded folder
+        dl_path = Path(dl_dir)
+        all_imgs = (list(dl_path.rglob("*.png")) +
+                    list(dl_path.rglob("*.jpg")) +
+                    list(dl_path.rglob("*.tif")))
+
+        # Filter out any that aren't satellite images (rough heuristic: >10KB)
+        sat_imgs = [f for f in all_imgs if f.stat().st_size > 10_000]
+
+        print(f"  Found {len(sat_imgs)} image files in downloaded repo")
+
+        for img in sat_imgs:
+            dest = RGB_DEST / img.name
+            if not dest.exists():
+                shutil.copy2(img, dest)
+
+        final_count = len(list(RGB_DEST.glob("*.png")))
+        print(f"  ✅ {final_count} images now in datasets/bigearthnet/rgb/")
+
+        if final_count == 0:
+            print("  ⚠️  No images found in your HF repo.")
+            print("  Your HF repo may only contain model weights, not images.")
+            print("  For --perplexity eval, images are NOT needed. Just run:")
+            print("    python -m training.finetuning.evaluate --perplexity --max-samples 100")
+
+    except Exception as e:
+        print(f"  ❌ Download failed: {e}")
+        import traceback; traceback.print_exc()
 EOF
 
 else
     echo "⏭️  [5/6] Skipping image download (--no-images flag set)"
-    echo "    Run with full eval using: bash scripts/setup_lightning.sh"
-    echo "    Or download images separately: python training/bigearthnet/fast_image_download.py"
+    echo "    For perplexity eval (no images needed):"
+    echo "      python -m training.finetuning.evaluate --perplexity --max-samples 100"
 fi
 
 # ─────────────────────────────────────────────
