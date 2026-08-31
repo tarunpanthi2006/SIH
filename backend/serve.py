@@ -275,7 +275,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="SatQuery-RS Model Server")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
-    parser.add_argument("--port", type=int, default=8100, help="Port to listen on")
+    parser.add_argument("--port", type=int, default=8080, help="Port to listen on (8080 is default for Lightning Studio)")
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload (dev)")
     args = parser.parse_args()
 
